@@ -11,9 +11,9 @@ import { withDomainTransaction } from '../../db/transaction.js';
 import { AppError, TeamResponse } from '@crewgrid/contracts';
 
 export class MembershipService {
-  toTeamResponse(team: TeamDocument, currentUserId?: ObjectId): TeamResponse {
-    const isMember = currentUserId ? team.leaderId.equals(currentUserId) : false;
+  toTeamResponse(team: TeamDocument, currentUserId?: ObjectId, isMemberOverride?: boolean): TeamResponse {
     const isLeader = currentUserId ? team.leaderId.equals(currentUserId) : false;
+    const isMember = isMemberOverride !== undefined ? isMemberOverride : isLeader;
 
     const permissions: string[] = [];
     if (isLeader) {

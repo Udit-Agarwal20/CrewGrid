@@ -5,6 +5,7 @@ import { teamRepo } from './team.repo.js';
 import { membershipRepo } from '../membership/membership.repo.js';
 import { membershipService } from '../membership/membership.service.js';
 import { auditService } from '../audit/audit.service.js';
+import { getDatabase } from '../../db/client.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validateRequest } from '../../middleware/validation.js';
 import {
@@ -48,9 +49,57 @@ export function createTeamRouter(): Router {
           throw new AppError(404, 'TEAM_NOT_FOUND', 'Team not found or has been deleted');
         }
 
-        const data = membershipService.toTeamResponse(team, req.user!._id);
+        const isMember = await membershipRepo.findActiveMembership(team.hackathonId, req.user!._id);
+        const isMemberOfThisTeam = Boolean(isMember && isMember.teamId.equals(team._id));
+        const data = membershipService.toTeamResponse(team, req.user!._id, isMemberOfThisTeam);
         const response: SuccessEnvelope<typeof data> = {
           data,
+          meta: { requestId: req.requestId }
+        };
+        res.status(200).json(response);
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // GET /api/v1/teams/:teamId/members (List team roster with public user profiles)
+  router.get(
+    '/:teamId/members',
+    requireAuth,
+    validateRequest({ params: TeamParamsSchema }),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const teamId = toId(req.params['teamId']!);
+        const team = await teamRepo.findActiveById(teamId);
+        if (!team) {
+          throw new AppError(404, 'TEAM_NOT_FOUND', 'Team not found');
+        }
+
+        const memberships = await membershipRepo.findTeamMembers(teamId);
+        const userIds = memberships.map((m) => m.userId);
+        const users = await getDatabase()
+          .collection('users')
+          .find({ _id: { $in: userIds } })
+          .toArray();
+        const userMap = new Map(users.map((u) => [u._id.toHexString(), u]));
+
+        const members = memberships.map((m) => {
+          const user = userMap.get(m.userId.toHexString());
+          const isLeader = team.leaderId.equals(m.userId);
+          return {
+            userId: m.userId.toHexString(),
+            displayName: (user?.['displayName'] as string) || 'Teammate',
+            handle: (user?.['handle'] as string | null) || null,
+            skills: (user?.['skills'] as string[]) || [],
+            timezone: (user?.['timezone'] as string | null) || null,
+            role: isLeader ? ('leader' as const) : ('member' as const),
+            joinedAt: m.joinedAt.toISOString()
+          };
+        });
+
+        const response: SuccessEnvelope<typeof members> = {
+          data: members,
           meta: { requestId: req.requestId }
         };
         res.status(200).json(response);
@@ -310,6 +359,44 @@ export function createHackathonTeamRouter(): Router {
             nextCursor,
             hasMore
           }
+        };
+        res.status(200).json(response);
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // GET /api/v1/hackathons/:hackathonId/teams/my-team (Current user active team in hackathon)
+  router.get(
+    '/my-team',
+    requireAuth,
+    validateRequest({ params: HackathonParamsSchema }),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const hackathonId = toId(req.params['hackathonId']!);
+        const membership = await membershipRepo.findActiveMembership(hackathonId, req.user!._id);
+        if (!membership) {
+          const response: SuccessEnvelope<null> = {
+            data: null,
+            meta: { requestId: req.requestId }
+          };
+          return void res.status(200).json(response);
+        }
+
+        const team = await teamRepo.findActiveById(membership.teamId);
+        if (!team) {
+          const response: SuccessEnvelope<null> = {
+            data: null,
+            meta: { requestId: req.requestId }
+          };
+          return void res.status(200).json(response);
+        }
+
+        const data = membershipService.toTeamResponse(team, req.user!._id, true);
+        const response: SuccessEnvelope<typeof data> = {
+          data,
+          meta: { requestId: req.requestId }
         };
         res.status(200).json(response);
       } catch (err) {

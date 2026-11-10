@@ -1,119 +1,160 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { apiFetch, ApiError } from '../api/client';
-import { PublicUser } from '@crewgrid/contracts';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { register, isAuthenticated } = useAuth();
+  const { success, error: toastError } = useToast();
+
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const rawReturnTo = searchParams.get('returnTo');
+  const returnTo = rawReturnTo && rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo : '/onboarding';
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/app', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setErrorMessage('');
+
+    if (password.length < 12) {
+      setErrorMessage('Password must be at least 12 characters long.');
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      await apiFetch<PublicUser>('/api/v1/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ displayName, email, password })
+      await register({
+        displayName: displayName.trim(),
+        email: email.trim().toLowerCase(),
+        password
       });
-
-      // After registration, redirect to login
-      navigate('/login');
+      success('Account created!', 'Let us set up your profile next.');
+      navigate(returnTo, { replace: true });
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Registration failed. Please check your network connection.');
-      }
+      const msg = err.message || 'Registration failed';
+      setErrorMessage(msg);
+      toastError('Registration error', msg);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto py-16 px-4">
-      <div className="bg-[#171E31] border border-[#35405A] rounded-2xl p-8 shadow-xl">
-        <h1 className="text-2xl font-bold text-[#E9EDF5] mb-2">Create Account</h1>
-        <p className="text-sm text-[#B5C1D4] mb-6">Join CrewGrid for Hack4Hack 2026</p>
+    <div className="min-h-screen bg-[#0B1020] text-[#E9EDF5] flex items-center justify-center p-4">
+      <div className="w-full max-w-md p-6 sm:p-8 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl">
+        {/* Brand */}
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center gap-2 font-black text-lg text-[#E9EDF5] mb-3">
+            <span className="w-7 h-7 rounded-lg bg-[#9BF5CC] flex items-center justify-center text-[#0B1020] text-sm">
+              C
+            </span>
+            <span>CrewGrid</span>
+          </Link>
+          <h1 className="text-2xl font-bold text-[#E9EDF5]">Create your account</h1>
+          <p className="text-xs text-[#B5C1D4] mt-1">Join the race-proof hackathon matching platform</p>
+        </div>
 
-        {error && (
-          <div role="alert" className="mb-6 p-3 rounded-lg bg-red-950/60 border border-red-500/50 text-red-200 text-sm">
-            {error}
+        {errorMessage && (
+          <div role="alert" className="p-3.5 mb-5 rounded-xl bg-[#F87171]/15 border border-[#F87171]/30 text-xs text-[#F87171]">
+            {errorMessage}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#B5C1D4] mb-1.5" htmlFor="displayName">
-              Display Name
+            <label htmlFor="reg-name" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              Full / Display Name
             </label>
             <input
-              id="displayName"
+              id="reg-name"
               type="text"
+              autoComplete="name"
               required
               minLength={2}
               maxLength={60}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC]"
-              placeholder="Alex Smith"
+              placeholder="Ada Lovelace"
+              className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#B5C1D4] mb-1.5" htmlFor="email">
+            <label htmlFor="reg-email" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
               Email Address
             </label>
             <input
-              id="email"
+              id="reg-email"
               type="email"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC]"
-              placeholder="alex@example.com"
-              autoComplete="email"
+              placeholder="you@domain.com"
+              className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#B5C1D4] mb-1.5" htmlFor="password">
-              Password (min 12 characters)
+            <label htmlFor="reg-password" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              Password (Min 12 characters)
             </label>
-            <input
-              id="password"
-              type="password"
-              required
-              minLength={12}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC]"
-              autoComplete="new-password"
-            />
+            <div className="relative">
+              <input
+                id="reg-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                required
+                minLength={12}
+                maxLength={128}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 12 characters"
+                className="w-full pl-3.5 pr-10 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#B5C1D4] hover:text-[#E9EDF5] transition"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-lg bg-[#9BF5CC] text-[#0B1020] font-semibold hover:bg-[#86e0b7] transition disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#9BF5CC]"
+            disabled={isSubmitting}
+            className="w-full mt-2 py-2.5 px-4 rounded-xl bg-[#9BF5CC] text-[#0B1020] font-bold text-sm hover:bg-[#86e0b7] flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-[#9BF5CC]/15"
           >
-            {loading ? 'Creating account...' : 'Register'}
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+            Create Account
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-[#B5C1D4]">
+        <div className="mt-6 pt-5 border-t border-[#35405A] text-center text-xs text-[#B5C1D4]">
           Already have an account?{' '}
-          <Link to="/login" className="text-[#9BF5CC] hover:underline">
+          <Link to={`/login${rawReturnTo ? `?returnTo=${encodeURIComponent(rawReturnTo)}` : ''}`} className="text-[#9BF5CC] font-semibold hover:underline">
             Sign In
           </Link>
-        </p>
+        </div>
       </div>
     </div>
   );
 }
-

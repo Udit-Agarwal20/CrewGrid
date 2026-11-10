@@ -1,61 +1,110 @@
-import { Routes, Route, Link } from 'react-router';
+import { Routes, Route, Navigate } from 'react-router';
+import { ToastProvider } from './context/ToastContext';
+import { AuthProvider } from './context/AuthContext';
+import { HackathonProvider } from './context/HackathonContext';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
+
+// Routes
 import { Home } from './routes/Home';
 import { Login } from './routes/Login';
 import { Register } from './routes/Register';
+import { Onboarding } from './routes/Onboarding';
+import { Dashboard } from './routes/Dashboard';
+import { TeamDiscovery } from './routes/TeamDiscovery';
+import { TeamDetail } from './routes/TeamDetail';
+import { TeammateDiscovery } from './routes/TeammateDiscovery';
+import { MyRequests } from './routes/MyRequests';
+import { Profile } from './routes/Profile';
+import { InviteRedeem } from './routes/InviteRedeem';
+import { EngineeringEvidence } from './routes/EngineeringEvidence';
+import { NotFound } from './routes/NotFound';
 
 export function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B1020] text-[#E9EDF5]">
-      <header className="border-b border-[#35405A] bg-[#171E31]/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-[#E9EDF5] hover:opacity-90">
-            <span className="w-6 h-6 rounded-md bg-[#9BF5CC] flex items-center justify-center text-[#0B1020] text-xs font-black">
-              C
-            </span>
-            <span>CrewGrid</span>
-          </Link>
+    <ToastProvider>
+      <AuthProvider>
+        <HackathonProvider>
+          <Routes>
+            {/* Public Marketing & Auth */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/invite" element={<InviteRedeem />} />
+            <Route path="/engineering" element={<EngineeringEvidence />} />
 
-          <nav className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/" className="text-[#B5C1D4] hover:text-[#E9EDF5] transition">
-              Home
-            </Link>
-            <Link to="/login" className="text-[#B5C1D4] hover:text-[#E9EDF5] transition">
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className="px-3.5 py-1.5 rounded-lg bg-[#9BF5CC] text-[#0B1020] font-semibold hover:bg-[#86e0b7] transition"
-            >
-              Register
-            </Link>
-          </nav>
-        </div>
-      </header>
+            {/* Protected Application Routes */}
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute>
+                  <Onboarding />
+                </ProtectedRoute>
+              }
+            />
 
-      <main className="flex-1">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="*"
-            element={
-              <div className="max-w-md mx-auto py-24 text-center">
-                <h1 className="text-4xl font-bold mb-4">404</h1>
-                <p className="text-[#B5C1D4] mb-6">Page not found</p>
-                <Link to="/" className="text-[#9BF5CC] hover:underline">
-                  Return to Home
-                </Link>
-              </div>
-            }
-          />
-        </Routes>
-      </main>
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
 
-      <footer className="border-t border-[#35405A] py-8 text-center text-xs text-[#B5C1D4]">
-        <p>CrewGrid — Hack4Hack Crew Hiring Challenge 2026 (PS1)</p>
-      </footer>
-    </div>
+            <Route
+              path="/app/events/:id/teams"
+              element={
+                <ProtectedRoute>
+                  <TeamDiscovery />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/app/teams/:id"
+              element={
+                <ProtectedRoute>
+                  <TeamDetail />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/app/events/:id/teammates"
+              element={
+                <ProtectedRoute>
+                  <TeammateDiscovery />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/app/events/:id/my-requests"
+              element={
+                <ProtectedRoute>
+                  <MyRequests />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/app/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Convenient aliases & redirects */}
+            <Route path="/events/:id" element={<Navigate to="/app/events/:id/teams" replace />} />
+            <Route path="/teams/:id" element={<Navigate to="/app/teams/:id" replace />} />
+
+            {/* 404 Fallback */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </HackathonProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
-

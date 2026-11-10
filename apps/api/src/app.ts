@@ -1,4 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import path from 'node:path';
+import fs from 'node:fs';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -130,6 +132,27 @@ export function createApp(): Express {
 
   // Invites top-level routes (/redeem)
   app.use('/api/v1/invites', createRedeemInviteRouter());
+
+  // Serve built SPA static files if present in production/single-origin mode
+  const possibleDistPaths = [
+    path.resolve(process.cwd(), 'apps/web/dist'),
+    path.resolve(process.cwd(), '../web/dist'),
+    path.resolve(process.cwd(), '../../apps/web/dist'),
+    path.resolve(process.cwd(), 'dist/apps/web')
+  ];
+  const webDistPath = possibleDistPaths.find((p) => fs.existsSync(p));
+
+  if (webDistPath) {
+    app.use(express.static(webDistPath));
+
+    // For any client-side GET navigation route, serve index.html (never for API or health routes)
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.method === 'GET' && !req.path.startsWith('/api/') && req.path !== '/health' && req.path !== '/ready') {
+        return res.sendFile(path.join(webDistPath, 'index.html'));
+      }
+      next();
+    });
+  }
 
   // Catch-all 404 handler for unknown routes
   app.use((req: Request, _res: Response, next: NextFunction) => {

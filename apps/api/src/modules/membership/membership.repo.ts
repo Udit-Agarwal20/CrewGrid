@@ -31,13 +31,13 @@ export class MembershipRepo {
 
   async insertMembership(
     doc: Omit<MembershipDocument, '_id'>,
-    session: ClientSession
+    session?: ClientSession
   ): Promise<MembershipDocument> {
     const fullDoc: MembershipDocument = {
       ...doc,
       _id: new ObjectId()
     };
-    await this.collection.insertOne(fullDoc, { session });
+    await this.collection.insertOne(fullDoc, session ? { session } : {});
     return fullDoc;
   }
 

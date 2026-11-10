@@ -1,0 +1,280 @@
+import { useState } from 'react';
+import { useParams, Link } from 'react-router';
+import {
+  Users,
+  Search,
+  Sparkles,
+  UserPlus,
+  ArrowLeft
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useMyTeam } from '../hooks/useTeams';
+import { useTeammates, useTeamSuggestions } from '../hooks/useTeammates';
+import { AppShell } from '../components/common/AppShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { CandidateCard } from '../components/matching/CandidateCard';
+import { ScoreBreakdown } from '../components/matching/ScoreBreakdown';
+import { SkeletonCard } from '../components/common/SkeletonCard';
+import { ErrorPanel } from '../components/common/ErrorPanel';
+import { InviteModal } from '../components/invites/InviteModal';
+
+const COMMON_TIMEZONES = [
+  'All Timezones',
+  'America/New_York',
+  'America/Los_Angeles',
+  'America/Chicago',
+  'Europe/London',
+  'Europe/Berlin',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'UTC'
+];
+
+export function TeammateDiscovery() {
+  const { id: hackathonId } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const { data: myTeam } = useMyTeam(hackathonId);
+
+  const isLeader = myTeam && myTeam.leaderId === user?.id;
+
+  const [activeTab, setActiveTab] = useState<'all' | 'suggestions'>('all');
+  const [skillFilter, setSkillFilter] = useState('');
+  const [selectedTimezone, setSelectedTimezone] = useState('All Timezones');
+  const [selectedTeamForInvite, setSelectedTeamForInvite] = useState<string | null>(null);
+
+  const timezoneParam = selectedTimezone === 'All Timezones' ? undefined : selectedTimezone;
+
+  const {
+    data: candidateResult,
+    isLoading: loadingCandidates,
+    error: candidateError,
+    refetch: refetchCandidates
+  } = useTeammates(hackathonId, {
+    skill: skillFilter.trim() || undefined,
+    timezone: timezoneParam,
+    limit: 50
+  });
+
+  const {
+    data: suggestions = [],
+    isLoading: loadingSuggestions
+  } = useTeamSuggestions(isLeader ? myTeam?.id : undefined);
+
+  const candidates = candidateResult?.data || [];
+
+  return (
+    <AppShell hackathonId={hackathonId}>
+      <div className="space-y-6">
+        {/* Navigation Breadcrumb */}
+        <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
+          <Link
+            to={hackathonId ? `/app/events/${hackathonId}/teams` : '/app'}
+            className="hover:text-[#9BF5CC] flex items-center gap-1 transition"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back to Team Board
+          </Link>
+          <span>/</span>
+          <span className="text-[#E9EDF5] font-bold">Teammate Discovery</span>
+        </div>
+
+        <PageHeader
+          title="Teammate Discovery"
+          subtitle="Discover participants looking for teams who have explicitly opted into discoverability. Find teammates by skill or timezone alignment."
+          action={
+            isLeader && (
+              <button
+                type="button"
+                onClick={() => setSelectedTeamForInvite(myTeam?.id || null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-2 transition shadow-sm"
+              >
+                <UserPlus className="w-4 h-4" />
+                Generate Team Invite
+              </button>
+            )
+          }
+        />
+
+        {/* Tab Selection if viewer is a team leader */}
+        {isLeader && (
+          <div className="flex border-b border-[#35405A] gap-4">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+                activeTab === 'all'
+                  ? 'border-[#9BF5CC] text-[#9BF5CC]'
+                  : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              All Candidates
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('suggestions')}
+              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+                activeTab === 'suggestions'
+                  ? 'border-[#9BF5CC] text-[#9BF5CC]'
+                  : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-[#9BF5CC]" />
+              Smart Recommendations ({suggestions.length})
+            </button>
+          </div>
+        )}
+
+        {/* Tab 1: All Candidates */}
+        {activeTab === 'all' && (
+          <div className="space-y-6">
+            {/* Filter Bar */}
+            <div className="p-4 rounded-2xl bg-[#171E31] border border-[#35405A] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#B5C1D4] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter by skill (e.g. react, node)..."
+                  value={skillFilter}
+                  onChange={(e) => setSkillFilter(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/50 focus:outline-none focus:border-[#9BF5CC] transition"
+                />
+              </div>
+
+              <div>
+                <select
+                  value={selectedTimezone}
+                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                >
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(skillFilter || selectedTimezone !== 'All Timezones') && (
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSkillFilter('');
+                      setSelectedTimezone('All Timezones');
+                    }}
+                    className="text-xs font-mono text-[#9BF5CC] hover:underline"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {candidateError && (
+              <ErrorPanel
+                title="Could not load candidates"
+                message={(candidateError as Error).message}
+                onRetry={() => refetchCandidates()}
+              />
+            )}
+
+            {loadingCandidates ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <SkeletonCard className="h-48" />
+                <SkeletonCard className="h-48" />
+                <SkeletonCard className="h-48" />
+              </div>
+            ) : candidates.length === 0 ? (
+              <div className="p-12 text-center rounded-2xl bg-[#171E31] border border-[#35405A] space-y-3">
+                <Users className="w-10 h-10 text-[#B5C1D4]/40 mx-auto" />
+                <h3 className="text-sm font-bold text-[#E9EDF5]">No Discoverable Candidates Found</h3>
+                <p className="text-xs text-[#B5C1D4] max-w-sm mx-auto">
+                  No participants matched your filters, or participants haven't opted into public discoverability yet.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {candidates.map((cand) => (
+                  <CandidateCard
+                    key={cand.id}
+                    user={cand}
+                    canInvite={Boolean(isLeader)}
+                    onInvite={() => setSelectedTeamForInvite(myTeam?.id || null)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: Smart Recommendations (Leader only) */}
+        {activeTab === 'suggestions' && isLeader && (
+          <div className="space-y-6">
+            <div className="p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A] flex items-center justify-between gap-4">
+              <div className="text-xs text-[#B5C1D4]">
+                <strong className="text-[#9BF5CC]">Explainable Matching:</strong> Suggestions are scored via{' '}
+                <code className="text-[#E9EDF5] bg-[#0B1020] px-1.5 py-0.5 rounded font-mono">
+                  Score = (0.7 * SkillCoverage) + (0.3 * TimezoneOverlap)
+                </code>
+                . Only discoverable participants who are not yet in a team are suggested.
+              </div>
+            </div>
+
+            {loadingSuggestions ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SkeletonCard className="h-48" />
+                <SkeletonCard className="h-48" />
+              </div>
+            ) : suggestions.length === 0 ? (
+              <div className="p-12 text-center rounded-2xl bg-[#171E31] border border-[#35405A] space-y-2">
+                <Sparkles className="w-10 h-10 text-[#B5C1D4]/40 mx-auto" />
+                <h3 className="text-sm font-bold text-[#E9EDF5]">No Recommendations Right Now</h3>
+                <p className="text-xs text-[#B5C1D4] max-w-sm mx-auto">
+                  Make sure your team specifies skills needed in team settings. As participants update their profiles, suggestions will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {suggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.userId}
+                    className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A] space-y-4 hover:border-[#9BF5CC]/30 transition"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-bold text-base text-[#E9EDF5]">
+                          {suggestion.displayName}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTeamForInvite(myTeam?.id || null)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition shrink-0"
+                      >
+                        Invite
+                      </button>
+                    </div>
+
+                    <ScoreBreakdown suggestion={suggestion} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Invite Generator Modal */}
+        {selectedTeamForInvite && (
+          <InviteModal
+            isOpen={!!selectedTeamForInvite}
+            teamId={selectedTeamForInvite}
+            onClose={() => setSelectedTeamForInvite(null)}
+          />
+        )}
+      </div>
+    </AppShell>
+  );
+}

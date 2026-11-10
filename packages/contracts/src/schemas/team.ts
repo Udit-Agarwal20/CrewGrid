@@ -70,6 +70,18 @@ export const TeamResponseSchema = z.object({
 
 export type TeamResponse = z.infer<typeof TeamResponseSchema>;
 
+export const TeamMemberSchema = z.object({
+  userId: ObjectIdSchema,
+  displayName: z.string(),
+  handle: z.string().nullable().optional(),
+  skills: z.array(z.string()).default([]),
+  timezone: z.string().nullable().optional(),
+  role: z.enum(['leader', 'member']),
+  joinedAt: z.string()
+});
+
+export type TeamMember = z.infer<typeof TeamMemberSchema>;
+
 export const TeamBoardQuerySchema = z.object({
   search: z.string().trim().max(60).optional(),
   skill: z.string().trim().max(40).optional(),
