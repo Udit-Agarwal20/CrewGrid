@@ -1,0 +1,13 @@
+stateDiagram-v2
+    [*] --> Forming: Team created (1 member; minSize > 1)
+    [*] --> Ready: Team created (minSize = 1)
+    Forming --> Ready: memberCount reaches minSize
+    Ready --> Forming: memberCount drops below minSize
+    Forming --> Deleted: final member leaves
+    Ready --> Deleted: final member leaves (when minSize = 1)
+    Deleted --> [*]
+    note right of Deleted
+      Team is logically deleted and
+      removed from active queries.
+      Audit history is preserved.
+    end note

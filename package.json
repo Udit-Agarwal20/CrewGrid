@@ -1,0 +1,30 @@
+{
+  "name": "crewgrid",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @crewgrid/api test",
+    "test:smoke": "pnpm --filter @crewgrid/api test:smoke",
+    "verify:invariants": "tsx scripts/invariants/verify.ts",
+    "mongo:start": "./scripts/local-mongo-rs.sh start",
+    "mongo:stop": "./scripts/local-mongo-rs.sh stop",
+    "mongo:status": "./scripts/local-mongo-rs.sh status",
+    "mongo:clean": "./scripts/local-mongo-rs.sh clean"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.72.1"
+  }
+}

@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    participant U as Authenticated User
+    participant API as Express API
+    participant S as Membership Service
+    participant DB as MongoDB Replica Set
+    participant SSE as Outbox Dispatcher
+    U->>API: POST invite/redeem (cookie, CSRF, idempotency key)
+    API->>S: Validate and admit
+    S->>DB: Begin transaction; check eligibility and token
+    S->>DB: Conditional team count increment if count < max
+    alt Seat available and membership unique
+        S->>DB: Insert membership; consume invite; audit; outbox; idempotency
+        S->>DB: Commit transaction
+        DB-->>S: Committed
+        S-->>API: 200 membership
+        API-->>U: Success
+        SSE->>DB: Poll committed outbox
+        SSE-->>U: member.joined signal; client refetches
+    else Team full or user already in a team
+        S->>DB: Abort transaction
+        S-->>API: 409 conflict
+        API-->>U: Clear error + client refetch
+    end
+    Note over S,DB: Transient transaction write conflicts retried; no external calls inside transaction.

@@ -1,0 +1,14 @@
+flowchart LR
+    U[Participants and Team Leaders] --> W[React SPA]
+    J[Hackathon Evaluator] --> W
+    W -->|HTTPS JSON REST| API[Express 5 TypeScript API]
+    W <-->|SSE notifications| API
+    API --> AUTH[Session Auth / CSRF]
+    API --> DOM[Transactional Team Domain]
+    API --> DISC[Discovery / Matching]
+    AUTH --> DB[(MongoDB Replica Set)]
+    DOM --> DB
+    DISC --> DB
+    API -->|Poll committed events| DB
+    CI[GitHub Actions Test Suite] --> API
+    LOAD[k6 Test Runner] --> API

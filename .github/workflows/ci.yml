@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-and-integration:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+        options: >-
+          --name mongodb
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize MongoDB replica set
+        run: |
+          docker exec mongodb mongosh --eval '
+            try {
+              rs.status();
+              console.log("Replica set already initialized");
+            } catch (e) {
+              rs.initiate({
+                _id: "rs0",
+                members: [{ _id: 0, host: "127.0.0.1:27017" }]
+              });
+              console.log("Replica set initiated");
+            }
+          '
+          # Wait for PRIMARY state
+          for i in {1..30}; do
+            IS_PRIMARY=$(docker exec mongodb mongosh --quiet --eval 'db.isMaster().ismaster')
+            if [ "$IS_PRIMARY" = "true" ]; then
+              echo "MongoDB replica set is PRIMARY"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Strict Typecheck
+        run: pnpm -r typecheck
+
+      - name: Production Build
+        run: pnpm -r build
+
+      - name: Replica Set Transaction Smoke Test
+        env:
+          MONGODB_URI: "mongodb://127.0.0.1:27017/crewgrid_test?replicaSet=rs0&directConnection=true"
+          MONGODB_DB: "crewgrid_test"
+        run: pnpm test:smoke
+
+      - name: API Integration Tests
+        env:
+          MONGODB_URI: "mongodb://127.0.0.1:27017/crewgrid_test?replicaSet=rs0&directConnection=true"
+          MONGODB_DB: "crewgrid_test"
+          NODE_ENV: "test"
+          APP_ORIGIN: "http://localhost:5173"
+        run: pnpm test:api
+
+      - name: Verify Invariants
+        env:
+          MONGODB_URI: "mongodb://127.0.0.1:27017/crewgrid_test?replicaSet=rs0&directConnection=true"
+          MONGODB_DB: "crewgrid_test"
+        run: pnpm verify:invariants
+

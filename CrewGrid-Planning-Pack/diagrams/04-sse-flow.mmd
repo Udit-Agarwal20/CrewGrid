@@ -1,0 +1,14 @@
+sequenceDiagram
+    participant API as Domain Transaction
+    participant DB as MongoDB
+    participant D as Outbox Poller
+    participant B as Authorized Browser
+    API->>DB: Team/membership + audit + outbox writes
+    DB-->>API: Commit success
+    D->>DB: Poll events after cursor
+    DB-->>D: Committed minimal event
+    D-->>B: SSE event: team.updated
+    B->>B: Invalidate TanStack Query cache
+    B->>API: GET authoritative team/board
+    API-->>B: Updated state
+    Note over B,API: On reconnect or visibility change, refetch even if event missed.

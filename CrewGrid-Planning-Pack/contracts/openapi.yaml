@@ -1,0 +1,1854 @@
+openapi: 3.1.0
+info:
+  title: CrewGrid REST API — Planned Contract
+  version: 1.0.0
+  description: Planning baseline for Hack4Hack PS1. Not yet implemented or tested. Cross-reference docs/04-API-EVENTS.md.
+    All side-effect routes require CSRF token; domain writes generally require an idempotency key (except invite-creation).
+servers:
+- url: /
+  description: Same-origin API
+tags:
+- name: Auth
+- name: Profiles
+- name: Hackathons
+- name: Teams
+- name: Requests
+- name: Invites
+- name: Memberships
+- name: Matching
+- name: Realtime
+- name: Operations
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: crewgrid_session
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    hackathonId:
+      name: hackathonId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    teamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    requestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    inviteId:
+      name: inviteId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID v4, stable across retries of the same logical action
+      schema:
+        type: string
+        format: uuid
+    cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+        maxLength: 512
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 12
+  schemas:
+    ObjectId:
+      type: string
+      pattern: ^[0-9a-fA-F]{24}$
+      example: 507f191e810c19729de860ea
+    DateTime:
+      type: string
+      format: date-time
+    ErrorEnvelope:
+      type: object
+      required:
+      - error
+      - meta
+      properties:
+        error:
+          type: object
+          required:
+          - code
+          - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+        meta:
+          $ref: '#/components/schemas/Meta'
+    Meta:
+      type: object
+      required:
+      - requestId
+      properties:
+        requestId:
+          type: string
+        nextCursor:
+          type:
+          - string
+          - 'null'
+        hasMore:
+          type: boolean
+    PublicUser:
+      type: object
+      required:
+      - id
+      - displayName
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        displayName:
+          type: string
+        handle:
+          type:
+          - string
+          - 'null'
+        bio:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        timezone:
+          type: string
+        discoverable:
+          type: boolean
+    Team:
+      type: object
+      required:
+      - id
+      - hackathonId
+      - name
+      - leaderId
+      - memberCount
+      - minSize
+      - maxSize
+      - openSeats
+      - stage
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        hackathonId:
+          $ref: '#/components/schemas/ObjectId'
+        name:
+          type: string
+        description:
+          type: string
+        leaderId:
+          $ref: '#/components/schemas/ObjectId'
+        memberCount:
+          type: integer
+          minimum: 1
+        minSize:
+          type: integer
+          minimum: 1
+        maxSize:
+          type: integer
+          minimum: 1
+        openSeats:
+          type: integer
+          minimum: 0
+        stage:
+          type: string
+          enum:
+          - forming
+          - ready
+        requiredSkills:
+          type: array
+          items:
+            type: string
+        viewerPermissions:
+          type: array
+          items:
+            type: string
+    CreateTeam:
+      type: object
+      required:
+      - name
+      - minSize
+      - maxSize
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 60
+        description:
+          type: string
+          maxLength: 500
+          default: ''
+        minSize:
+          type: integer
+          minimum: 1
+        maxSize:
+          type: integer
+          minimum: 1
+        requiredSkills:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 40
+    EditTeam:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 60
+        description:
+          type: string
+          maxLength: 500
+        maxSize:
+          type: integer
+          minimum: 1
+        minSize:
+          type: integer
+          minimum: 1
+        requiredSkills:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+    JoinRequest:
+      type: object
+      required:
+      - id
+      - teamId
+      - applicantId
+      - status
+      - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        teamId:
+          $ref: '#/components/schemas/ObjectId'
+        applicantId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - declined
+          - canceled
+          - invalidated
+        message:
+          type: string
+        createdAt:
+          $ref: '#/components/schemas/DateTime'
+        resolvedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    InviteMetadata:
+      type: object
+      required:
+      - id
+      - expiresAt
+      - status
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+        status:
+          type: string
+          enum:
+          - available
+          - used
+          - expired
+          - revoked
+    ScoreComponent:
+      type: object
+      properties:
+        complementarySkills:
+          type: integer
+          minimum: 0
+          maximum: 100
+        timezoneFit:
+          type: integer
+          minimum: 0
+          maximum: 100
+    Suggestion:
+      type: object
+      required:
+      - userId
+      - score
+      - components
+      - reasons
+      properties:
+        userId:
+          $ref: '#/components/schemas/ObjectId'
+        displayName:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        components:
+          $ref: '#/components/schemas/ScoreComponent'
+        reasons:
+          type: array
+          items:
+            type: string
+    RegisterInput:
+      type: object
+      required:
+      - email
+      - password
+      - displayName
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 60
+    LoginInput:
+      type: object
+      required:
+      - email
+      - password
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    ProfileUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 60
+        handle:
+          type: string
+          minLength: 3
+          maxLength: 24
+        bio:
+          type: string
+          maxLength: 280
+        skills:
+          type: array
+          maxItems: 15
+          items:
+            type: string
+        timezone:
+          type: string
+          example: Asia/Kolkata
+        preferredHours:
+          type: object
+          properties:
+            startLocal:
+              type: string
+              pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+            endLocal:
+              type: string
+              pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+            days:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+                maximum: 6
+        discoverable:
+          type: boolean
+        hackathonId:
+          $ref: '#/components/schemas/ObjectId'
+    Hackathon:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        slug:
+          type: string
+        title:
+          type: string
+        minTeamSize:
+          type: integer
+        maxTeamSize:
+          type: integer
+        active:
+          type: boolean
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        action:
+          type: string
+        actorId:
+          type: string
+        occurredAt:
+          $ref: '#/components/schemas/DateTime'
+        summary:
+          type: string
+    MemberActionResponse:
+      type: object
+      properties:
+        teamId:
+          $ref: '#/components/schemas/ObjectId'
+        userId:
+          $ref: '#/components/schemas/ObjectId'
+        memberCount:
+          type: integer
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: No permission, Origin or CSRF invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Domain conflict (e.g. TEAM_FULL, ALREADY_IN_TEAM)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Validation:
+      description: Input schema error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimited:
+      description: Too many attempts
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unavailable:
+      description: Temporary backend failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: A-01
+      summary: Register a user
+      tags:
+      - Auth
+      x-api-id: A-01
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicUser'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+  /api/v1/auth/login:
+    post:
+      operationId: A-02
+      summary: Login, creating an HttpOnly session cookie
+      tags:
+      - Auth
+      x-api-id: A-02
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicUser'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+  /api/v1/auth/logout:
+    post:
+      operationId: A-03
+      summary: Revoke current session
+      tags:
+      - Auth
+      x-api-id: A-03
+      responses:
+        '204':
+          description: Success with no body
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+  /api/v1/auth/me:
+    get:
+      operationId: A-04
+      summary: Read authenticated account
+      tags:
+      - Auth
+      x-api-id: A-04
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicUser'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+  /api/v1/auth/csrf:
+    get:
+      operationId: A-05
+      summary: Fetch session-bound CSRF token
+      tags:
+      - Auth
+      x-api-id: A-05
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: object
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+  /api/v1/profile:
+    get:
+      operationId: A-06
+      summary: Read own private profile
+      tags:
+      - Profiles
+      x-api-id: A-06
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicUser'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+    patch:
+      operationId: A-07
+      summary: Edit profile, skills, timezone and opt-in discovery
+      tags:
+      - Profiles
+      x-api-id: A-07
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicUser'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+  /api/v1/hackathons:
+    get:
+      operationId: A-08
+      summary: List active hackathons
+      tags:
+      - Hackathons
+      x-api-id: A-08
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Hackathon'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security: []
+  /api/v1/hackathons/{hackathonId}/teams:
+    get:
+      operationId: A-09
+      summary: Paginated live team board
+      tags:
+      - Teams
+      x-api-id: A-09
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/hackathonId'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/limit'
+      - name: onlyOpen
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: search
+        in: query
+        schema:
+          type: string
+          maxLength: 60
+      - name: skill
+        in: query
+        schema:
+          type: string
+          maxLength: 40
+    post:
+      operationId: A-10
+      summary: Create team and founder membership atomically
+      tags:
+      - Teams
+      x-api-id: A-10
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Team'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/hackathonId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeam'
+  /api/v1/teams/{teamId}:
+    get:
+      operationId: A-11
+      summary: Read active team with viewer permissions
+      tags:
+      - Teams
+      x-api-id: A-11
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Team'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+    patch:
+      operationId: A-12
+      summary: Leader edits team metadata and guarded capacity
+      tags:
+      - Teams
+      x-api-id: A-12
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Team'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditTeam'
+  /api/v1/teams/{teamId}/requests:
+    post:
+      operationId: A-13
+      summary: Create pending join request (does not reserve seat)
+      tags:
+      - Requests
+      x-api-id: A-13
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JoinRequest'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                message:
+                  type: string
+                  maxLength: 280
+    get:
+      operationId: A-14
+      summary: Leader reads pending join requests
+      tags:
+      - Requests
+      x-api-id: A-14
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JoinRequest'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/limit'
+  /api/v1/requests/mine:
+    get:
+      operationId: A-15
+      summary: Participant reads own sent join requests
+      tags:
+      - Requests
+      x-api-id: A-15
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JoinRequest'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/limit'
+  /api/v1/requests/{requestId}/approve:
+    post:
+      operationId: A-16
+      summary: Leader approves applicant with safe admission
+      tags:
+      - Requests
+      x-api-id: A-16
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JoinRequest'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/requestId'
+      - $ref: '#/components/parameters/idempotencyKey'
+  /api/v1/requests/{requestId}/decline:
+    post:
+      operationId: A-17
+      summary: Leader declines request
+      tags:
+      - Requests
+      x-api-id: A-17
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JoinRequest'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/requestId'
+  /api/v1/requests/{requestId}/cancel:
+    post:
+      operationId: A-18
+      summary: Applicant cancels request
+      tags:
+      - Requests
+      x-api-id: A-18
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JoinRequest'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/requestId'
+  /api/v1/teams/{teamId}/invites:
+    post:
+      operationId: A-19
+      summary: Leader creates a single-use invite, returns raw token once
+      tags:
+      - Invites
+      x-api-id: A-19
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                    - inviteId
+                    - token
+                    - expiresAt
+                    - redeemUrl
+                    properties:
+                      inviteId:
+                        $ref: '#/components/schemas/ObjectId'
+                      token:
+                        type: string
+                        description: Plaintext code returned once; do not log or persist unencrypted
+                      expiresAt:
+                        $ref: '#/components/schemas/DateTime'
+                      redeemUrl:
+                        type: string
+                        format: uri
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expiresInHours:
+                  type: integer
+                  minimum: 1
+                  maximum: 72
+                  default: 24
+              additionalProperties: false
+      description: 'No required Idempotency-Key on invite creation: plaintext secret cannot safely be replayed from stored
+        idempotency response.'
+    get:
+      operationId: A-20
+      summary: Leader lists invite metadata only
+      tags:
+      - Invites
+      x-api-id: A-20
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InviteMetadata'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+  /api/v1/teams/{teamId}/invites/{inviteId}/revoke:
+    post:
+      operationId: A-21
+      summary: Leader revokes unused invite
+      tags:
+      - Invites
+      x-api-id: A-21
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InviteMetadata'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/inviteId'
+  /api/v1/invites/redeem:
+    post:
+      operationId: A-22
+      summary: Redeem one-time invite; guarded membership admission
+      tags:
+      - Invites
+      x-api-id: A-22
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MemberActionResponse'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - token
+              additionalProperties: false
+              properties:
+                token:
+                  type: string
+                  minLength: 20
+                  maxLength: 100
+  /api/v1/teams/{teamId}/leave:
+    post:
+      operationId: A-23
+      summary: Leave team; auto-promote leader or delete last-member team
+      tags:
+      - Memberships
+      x-api-id: A-23
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      teamDeleted:
+                        type: boolean
+                      successorId:
+                        type:
+                        - string
+                        - 'null'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/idempotencyKey'
+  /api/v1/teams/{teamId}/members/{userId}:
+    delete:
+      operationId: A-24
+      summary: Leader removes nonleader
+      tags:
+      - Memberships
+      x-api-id: A-24
+      responses:
+        '204':
+          description: Success with no body
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/userId'
+      - $ref: '#/components/parameters/idempotencyKey'
+  /api/v1/teams/{teamId}/transfer-leadership:
+    post:
+      operationId: A-25
+      summary: Leader transfers role to current member
+      tags:
+      - Memberships
+      x-api-id: A-25
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Team'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+        csrfToken: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - newLeaderId
+              additionalProperties: false
+              properties:
+                newLeaderId:
+                  $ref: '#/components/schemas/ObjectId'
+  /api/v1/teams/{teamId}/audit:
+    get:
+      operationId: A-26
+      summary: Authorized team members view safe audit timeline
+      tags:
+      - Teams
+      x-api-id: A-26
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/limit'
+  /api/v1/hackathons/{hackathonId}/teammates:
+    get:
+      operationId: A-27
+      summary: Opt-in unassigned candidate board
+      tags:
+      - Matching
+      x-api-id: A-27
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicUser'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/hackathonId'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/limit'
+      - name: skill
+        in: query
+        schema:
+          type: string
+      - name: timezone
+        in: query
+        schema:
+          type: string
+  /api/v1/teams/{teamId}/suggestions:
+    get:
+      operationId: A-28
+      summary: Explainable skill/timezone teammate ranking for leader
+      tags:
+      - Matching
+      x-api-id: A-28
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Suggestion'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/teamId'
+  /api/v1/hackathons/{hackathonId}/events:
+    get:
+      operationId: A-29
+      summary: Authenticated SSE updates for relevant team/board
+      tags:
+      - Realtime
+      x-api-id: A-29
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security:
+      - cookieSession: []
+      parameters:
+      - $ref: '#/components/parameters/hackathonId'
+      description: Events carry minimal IDs and event types; see contracts/realtime-events.schema.json. Reconnect requires
+        authoritative refetch.
+  /api/v1/health:
+    get:
+      operationId: A-30
+      summary: Liveness
+      tags:
+      - Operations
+      x-api-id: A-30
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                        - ok
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security: []
+  /api/v1/ready:
+    get:
+      operationId: A-31
+      summary: DB and index readiness
+      tags:
+      - Operations
+      x-api-id: A-31
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                        - ready
+                        - not_ready
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      security: []

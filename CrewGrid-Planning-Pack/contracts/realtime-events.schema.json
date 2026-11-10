@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crewgrid.example/schema/realtime-event-v1.json",
+  "title": "CrewGrid SSE event envelope (v1) \u2014 planning schema",
+  "description": "Transport envelope; no raw invitation tokens, passwords, emails, or private request messages.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "hackathonId",
+    "scope",
+    "occurredAt",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$"
+    },
+    "eventType": {
+      "enum": [
+        "team.created",
+        "team.updated",
+        "member.joined",
+        "member.left",
+        "request.created",
+        "request.resolved",
+        "leader.transferred",
+        "team.deleted"
+      ]
+    },
+    "hackathonId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$"
+    },
+    "teamId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "userId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "scope": {
+      "enum": [
+        "public-hackathon",
+        "team",
+        "user"
+      ]
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "integer",
+          "boolean",
+          "null"
+        ]
+      },
+      "description": "Allow only enumerated safe fields per event type in code; no secrets."
+    }
+  }
+}
