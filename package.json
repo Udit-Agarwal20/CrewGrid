@@ -13,6 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:api": "pnpm --filter @crewgrid/api test",
+    "test:e2e": "playwright test",
     "test:smoke": "pnpm --filter @crewgrid/api test:smoke",
     "verify:invariants": "tsx scripts/invariants/verify.ts",
     "mongo:start": "./scripts/local-mongo-rs.sh start",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
     "eslint": "^10.14.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

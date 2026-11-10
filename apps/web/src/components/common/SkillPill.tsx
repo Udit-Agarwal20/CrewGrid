@@ -30,3 +30,4 @@ export function SkillPill({ skill, onRemove, size = 'md' }: SkillPillProps) {
     </span>
   );
 }
+

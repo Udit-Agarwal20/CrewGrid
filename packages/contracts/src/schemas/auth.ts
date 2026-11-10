@@ -55,3 +55,10 @@ export const CsrfResponseSchema = z.object({
 
 export type CsrfResponse = z.infer<typeof CsrfResponseSchema>;
 
+export const LoginResponseSchema = z.object({
+  user: PublicUserSchema,
+  csrfToken: z.string()
+});
+
+export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+

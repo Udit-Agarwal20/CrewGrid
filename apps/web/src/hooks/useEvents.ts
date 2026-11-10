@@ -1,8 +1,19 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { RealtimeEventEnvelope } from '@crewgrid/contracts';
+import { RealtimeEventEnvelope, RealtimeEventType } from '@crewgrid/contracts';
 
 export type ConnectionState = 'connected' | 'connecting' | 'disconnected';
+
+export const SUPPORTED_SSE_EVENTS: RealtimeEventType[] = [
+  'team.created',
+  'team.updated',
+  'team.deleted',
+  'member.joined',
+  'member.left',
+  'request.created',
+  'request.resolved',
+  'leader.transferred'
+];
 
 export function useEvents(hackathonId: string | undefined) {
   const queryClient = useQueryClient();
@@ -41,16 +52,39 @@ export function useEvents(hackathonId: string | undefined) {
     }
 
     let isCancelled = false;
+    let currentEs: EventSource | null = null;
+
+    const handleEvent = (messageEvent: MessageEvent) => {
+      if (isCancelled) return;
+      try {
+        const envelope: RealtimeEventEnvelope = JSON.parse(messageEvent.data);
+        setLastActivity(new Date());
+        invalidateQueriesForEvent(envelope);
+      } catch {
+        // Ignore heartbeat comments or non-json keep-alive
+      }
+    };
+
+    function cleanupListeners(es: EventSource) {
+      es.onopen = null;
+      es.onmessage = null;
+      es.onerror = null;
+      for (const eventName of SUPPORTED_SSE_EVENTS) {
+        es.removeEventListener(eventName, handleEvent as EventListener);
+      }
+    }
 
     function connect() {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (currentEs) {
+        cleanupListeners(currentEs);
+        currentEs.close();
       }
 
       setStatus('connecting');
 
       const url = `/api/v1/hackathons/${hackathonId}/events`;
       const es = new EventSource(url, { withCredentials: true });
+      currentEs = es;
       eventSourceRef.current = es;
 
       es.onopen = () => {
@@ -60,20 +94,18 @@ export function useEvents(hackathonId: string | undefined) {
         }
       };
 
-      es.onmessage = (messageEvent) => {
-        if (isCancelled) return;
-        try {
-          const envelope: RealtimeEventEnvelope = JSON.parse(messageEvent.data);
-          setLastActivity(new Date());
-          invalidateQueriesForEvent(envelope);
-        } catch {
-          // Ignore heartbeat or non-json keep-alive comments
-        }
-      };
+      // Handle standard message events
+      es.onmessage = handleEvent;
+
+      // Register listeners for all server-named SSE event types
+      for (const eventName of SUPPORTED_SSE_EVENTS) {
+        es.addEventListener(eventName, handleEvent as EventListener);
+      }
 
       es.onerror = () => {
         if (isCancelled) return;
         setStatus('disconnected');
+        cleanupListeners(es);
         es.close();
 
         // Reconnect after 3 seconds with jitter
@@ -99,7 +131,6 @@ export function useEvents(hackathonId: string | undefined) {
         }
       }
     };
-
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
@@ -108,10 +139,11 @@ export function useEvents(hackathonId: string | undefined) {
       clearTimeout(reconnectTimeoutRef.current);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (currentEs) {
+        cleanupListeners(currentEs);
+        currentEs.close();
       }
+      eventSourceRef.current = null;
       setStatus('disconnected');
     };
   }, [hackathonId, invalidateQueriesForEvent, queryClient]);

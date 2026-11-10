@@ -32,7 +32,7 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
       </div>
 
       {/* Mobile Top Header */}
-      <div className="md:hidden sticky top-0 z-40 bg-[#171E31]/95 backdrop-blur border-b border-[#35405A] px-4 h-16 flex items-center justify-between">
+      <div className="md:hidden sticky top-0 z-50 bg-[#171E31]/95 backdrop-blur border-b border-[#35405A] px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className="w-6 h-6 rounded-md bg-[#9BF5CC] flex items-center justify-center text-[#0B1020] text-xs font-black">
             C
@@ -58,7 +58,7 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 md:hidden bg-black/75 backdrop-blur-xs flex"
+          className="fixed inset-0 z-40 md:hidden bg-black/75 backdrop-blur-xs flex pt-16"
           onClick={(e) => {
             if (e.target === e.currentTarget) setMobileMenuOpen(false);
           }}

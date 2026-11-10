@@ -72,3 +72,4 @@ export function ScoreBreakdown({ suggestion, className = '' }: ScoreBreakdownPro
     </div>
   );
 }
+

@@ -82,3 +82,4 @@ export function useHackathon(): HackathonContextValue {
   }
   return ctx;
 }
+

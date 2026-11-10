@@ -47,3 +47,4 @@ export function LiveConnectionStatus({ status, lastActivity, className = '' }: L
     </div>
   );
 }
+

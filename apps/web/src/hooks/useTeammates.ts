@@ -39,3 +39,4 @@ export function useTeamSuggestions(teamId: string | undefined) {
     staleTime: 15000
   });
 }
+

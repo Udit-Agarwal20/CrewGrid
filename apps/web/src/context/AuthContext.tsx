@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { PublicUser, LoginRequest, RegisterRequest } from '@crewgrid/contracts';
+import { PublicUser, LoginRequest, RegisterRequest, LoginResponse } from '@crewgrid/contracts';
 import { apiFetch, refreshCsrfToken, setCsrfToken, ApiError } from '../api/client';
 
 interface AuthContextValue {
@@ -51,12 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (data: LoginRequest) => {
-      const res = await apiFetch<PublicUser>('/api/v1/auth/login', {
+      const res = await apiFetch<LoginResponse>('/api/v1/auth/login', {
         method: 'POST',
         body: JSON.stringify(data)
       });
-      setUser(res.data);
-      await refreshCsrfToken();
+      setUser(res.data.user);
+      setCsrfToken(res.data.csrfToken);
     },
     []
   );
@@ -68,12 +68,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(data)
       });
       // After registration, auto-login with credentials
-      const loginRes = await apiFetch<PublicUser>('/api/v1/auth/login', {
+      const loginRes = await apiFetch<LoginResponse>('/api/v1/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: data.email, password: data.password })
       });
-      setUser(loginRes.data);
-      await refreshCsrfToken();
+      setUser(loginRes.data.user);
+      setCsrfToken(loginRes.data.csrfToken);
     },
     []
   );
@@ -111,3 +111,4 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
+

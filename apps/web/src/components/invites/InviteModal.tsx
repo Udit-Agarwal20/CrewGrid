@@ -222,3 +222,4 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
     </div>
   );
 }
+

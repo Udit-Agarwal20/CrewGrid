@@ -6,63 +6,64 @@ import {
   ExternalLink,
   Lock,
   FileCode,
-  Database
+  Database,
+  Cpu
 } from 'lucide-react';
 
 const INVARIANTS = [
   {
     id: 'I-01',
     title: 'Single-Team Assignment Guarantee',
-    description: 'A user may belong to at most one team per hackathon. Enforced by unique compound index on memberships(userId, hackathonId) and transactional pre-checks.',
-    index: 'db.memberships.createIndex({ userId: 1, hackathonId: 1 }, { unique: true })'
+    description: 'A user may belong to at most one team per hackathon. Enforced by unique compound index on memberships(hackathonId, userId) and transactional pre-checks before membership write.',
+    index: "db.collection('memberships').createIndex({ hackathonId: 1, userId: 1 }, { unique: true, name: 'uniq_member_per_event' })"
   },
   {
     id: 'I-02',
     title: 'Strict Capacity Ceiling',
-    description: 'team.memberCount <= team.maxCapacity is enforced atomically in MongoDB transactions. Tested under a 50-way concurrent last-seat race: exactly 1 winner, 49 rejected with 409 Conflict.',
-    index: 'db.teams.updateOne({ _id: teamId, memberCount: { $lt: maxCapacity } }, { $inc: { memberCount: 1 } })'
+    description: 'team.memberCount <= team.maxSize is enforced atomically within MongoDB session transactions. Concurrency tests confirm 0 over-allocation under concurrent races.',
+    index: "db.collection('teams').updateOne({ _id: teamId, memberCount: { $lt: maxSize } }, { $inc: { memberCount: 1 } }, { session })"
   },
   {
     id: 'I-03',
     title: 'Valid Capacity Range',
-    description: 'minCapacity <= maxCapacity within hackathon bounds. Reductions below current member count are rejected with HTTP 400.',
-    index: 'Zod validation + Transactional capacity reduction guards'
+    description: 'minSize <= maxSize within hackathon bounds. Reductions of maxSize below the current memberCount are guarded and rejected with HTTP 400.',
+    index: 'Zod refinement schema validation + guarded transactional capacity reductions'
   },
   {
     id: 'I-04',
     title: 'Deterministic Stage Derivation',
-    description: 'Team stage is strictly derived: ready when memberCount >= minCapacity, forming otherwise.',
-    index: 'Derived on every roster mutation inside transaction'
+    description: "Team stage is derived dynamically: 'ready' when memberCount >= minSize, 'forming' otherwise.",
+    index: "Derived inside transaction on every membership mutation: memberCount >= minSize ? 'ready' : 'forming'"
   },
   {
     id: 'I-05',
     title: 'Leader Invariant',
-    description: 'Every team has exactly one active leader. Enforced by leaderId foreign key and leader role assignment on creator.',
-    index: 'db.memberships.createIndex({ teamId: 1, role: 1 })'
+    description: 'Every team has exactly one active leader referenced by team.leaderId matching a valid membership record with role: leader.',
+    index: "db.collection('memberships').createIndex({ teamId: 1, joinedAt: 1, _id: 1 }, { name: 'team_roster_succession' })"
   },
   {
     id: 'I-06',
     title: 'Atomic Leader Succession',
-    description: 'When a leader leaves without explicit transfer, leadership passes to the oldest member by joinedAt. If 1 member remains, team is cleanly disbanded.',
-    index: 'find({ teamId }).sort({ joinedAt: 1 }).limit(1)'
+    description: 'When a leader leaves without explicit transfer, leadership automatically passes to the oldest member by joinedAt. If 1 member remains, the team is disbanded.',
+    index: "membershipRepo.findOldestMember(teamId, session) -> sort({ joinedAt: 1 }).limit(1)"
   },
   {
     id: 'I-07',
     title: 'Join Request Lifecycle & Auto-Invalidation',
-    description: 'A user may have at most one pending request per team. Joining a team automatically transitions all pending requests for that user to invalidated.',
-    index: 'db.joinRequests.createIndex({ teamId: 1, applicantId: 1 }, { unique: true, partialFilterExpression: { status: "pending" } })'
+    description: 'A user may have at most one pending request per team. Joining a team automatically transitions all other pending requests for that user to invalidated.',
+    index: "db.collection('join_requests').createIndex({ teamId: 1, applicantId: 1 }, { unique: true, partialFilterExpression: { status: 'pending' }, name: 'uniq_pending_request' })"
   },
   {
     id: 'I-08',
     title: 'Invite Token Secrecy & Single-Use Safety',
-    description: 'Invite tokens are hashed with SHA-256 before storage. Plaintext tokens are never stored or logged, and URL fragments (#token=...) prevent network transmission.',
-    index: 'db.invites.createIndex({ tokenHash: 1 }, { unique: true })'
+    description: 'Invite tokens are hashed with SHA-256 before storage. Plaintext tokens are never stored in the database, and URL fragments (#token=...) prevent network transmission.',
+    index: "db.collection('invites').createIndex({ tokenHash: 1 }, { unique: true, name: 'uniq_invite_hash' })"
   },
   {
     id: 'I-09',
     title: 'Audit & Outbox Atomicity',
-    description: 'Every team mutation atomically appends an immutable audit event and an outbox event within the exact same MongoDB transaction session.',
-    index: 'db.auditLogs.insertOne(..., { session }); db.outbox.insertOne(..., { session });'
+    description: 'Every domain mutation writes state change, immutable audit event, and transactional outbox event inside the exact same MongoDB ClientSession transaction.',
+    index: "await auditService.recordEvent(..., session); await outboxRepo.insertEvent(..., session);"
   }
 ];
 
@@ -116,9 +117,16 @@ export function EngineeringEvidence() {
             Engineering Verification & Evidence Dossier
           </h1>
           <p className="text-base text-[#B5C1D4] leading-relaxed max-w-3xl">
-            CrewGrid is built from first principles to solve race conditions in collaborative team formation.
-            This document details our formal database invariants, real concurrency stress tests, token security model, and reproducible verification commands.
+            CrewGrid is engineered from first principles to solve race conditions in collaborative team formation.
+            This document details our formal database invariants, verified concurrency race proofs, token secrecy model, and reproducible verification commands.
           </p>
+
+          <div className="p-3.5 rounded-xl bg-[#222A42]/50 border border-[#35405A] flex items-center gap-2.5 text-xs text-[#B5C1D4]">
+            <Cpu className="w-4 h-4 text-[#9BF5CC] shrink-0" />
+            <span>
+              <strong>Verified Test Environment:</strong> Local MongoDB 8.x replica set (<code>rs0</code>) on macOS arm64 (Node 24.x) and GitHub Actions Ubuntu 24.04 CI runners.
+            </span>
+          </div>
         </div>
 
         {/* Verification Summary Cards */}
@@ -126,13 +134,13 @@ export function EngineeringEvidence() {
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
             <div className="text-2xl font-black font-mono text-[#9BF5CC]">80 / 80</div>
             <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">API Integration Tests</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">11 suites with real replica set</div>
+            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">11 suites with live replica set</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
             <div className="text-2xl font-black font-mono text-[#9BF5CC]">0</div>
             <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">Invariant Violations</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">Verified via pnpm verify:invariants</div>
+            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">Checked via pnpm verify:invariants</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
@@ -142,9 +150,9 @@ export function EngineeringEvidence() {
           </div>
 
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
-            <div className="text-2xl font-black font-mono text-[#9BF5CC]">100%</div>
-            <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">Transactional Atomicity</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">Mutations + Audit + Outbox in 1 tx</div>
+            <div className="text-2xl font-black font-mono text-[#9BF5CC]">ACID</div>
+            <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">Multi-Doc Transactions</div>
+            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">State + Audit + Outbox in 1 session</div>
           </div>
         </div>
 
@@ -171,7 +179,7 @@ export function EngineeringEvidence() {
                 <div>&gt; Total concurrent attempts: 50</div>
                 <div className="text-[#9BF5CC]">&gt; HTTP 200/201 successful joins: 1</div>
                 <div className="text-[#FBBF24]">&gt; HTTP 409 Conflict (TEAM_FULL): 49</div>
-                <div>&gt; Final team.memberCount: exactly maxCapacity</div>
+                <div>&gt; Final team.memberCount: exactly maxSize</div>
               </div>
             </div>
 
@@ -203,7 +211,7 @@ export function EngineeringEvidence() {
             <h2 className="text-xl font-bold tracking-tight">Database Invariants Matrix (I-01 to I-09)</h2>
           </div>
           <p className="text-xs text-[#B5C1D4]">
-            Every invariant is guarded at both the MongoDB schema/index layer and within multi-document ACID transactions with retry handling for WriteConflict errors.
+            Every invariant is guarded at both the MongoDB schema/index layer and within multi-document ACID transactions with WriteConflict retry handling.
           </p>
 
           <div className="space-y-3">
@@ -240,7 +248,7 @@ export function EngineeringEvidence() {
                 <h3 className="font-bold text-sm text-[#E9EDF5]">1. SHA-256 Hash Storage</h3>
                 <p>
                   Invite tokens are generated with 32 cryptographically secure random bytes (<code className="text-[#9BF5CC]">crypto.randomBytes(32).toString('base64url')</code>).
-                  Only their SHA-256 digest is stored in MongoDB. Even if the database is leaked, no plaintext invite token can be recovered.
+                  Only their SHA-256 digest is stored in the <code className="text-[#9BF5CC]">invites</code> collection. If the database were leaked, no plaintext invite tokens could be recovered.
                 </p>
               </div>
 
@@ -248,21 +256,21 @@ export function EngineeringEvidence() {
                 <h3 className="font-bold text-sm text-[#E9EDF5]">2. URL Fragment (#token=...) Defense</h3>
                 <p>
                   Invite URLs transmit tokens via the hash fragment (<code className="text-[#9BF5CC]">/invite#token=...</code>).
-                  RFC 3986 specifies fragments are never transmitted to HTTP servers. The frontend immediately wipes the URL with <code className="text-[#9BF5CC]">history.replaceState</code> upon receipt.
+                  Per RFC 3986, fragments are never transmitted over HTTP. The client-side app immediately strips the fragment using <code className="text-[#9BF5CC]">history.replaceState</code> upon mount.
                 </p>
               </div>
 
               <div className="space-y-2">
                 <h3 className="font-bold text-sm text-[#E9EDF5]">3. Argon2id Password Hashing</h3>
                 <p>
-                  User passwords require minimum 12 characters and are hashed using OWASP-recommended Argon2id parameters (memoryCost: 65536 KB, timeCost: 3, parallelism: 4).
+                  Passwords require minimum 12 characters and are hashed with Argon2id (<code className="text-[#9BF5CC]">type: argon2.argon2id, memoryCost: 19456, timeCost: 2</code>). A constant-time dummy verification is run on nonexistent users to eliminate timing attacks.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <h3 className="font-bold text-sm text-[#E9EDF5]">4. Origin + Double Submit CSRF Protection</h3>
+                <h3 className="font-bold text-sm text-[#E9EDF5]">4. Origin + Timing-Safe CSRF Header</h3>
                 <p>
-                  State-changing requests enforce Origin/Referer matching against server host, alongside cryptographically signed CSRF tokens transmitted via custom request headers.
+                  State-changing requests validate Origin/Referer against allowed host. Authenticated sessions verify an <code className="text-[#9BF5CC]">X-CSRF-Token</code> request header against the database session token using <code className="text-[#9BF5CC]">crypto.timingSafeEqual</code>.
                 </p>
               </div>
             </div>

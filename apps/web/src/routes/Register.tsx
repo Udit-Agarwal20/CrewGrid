@@ -22,9 +22,9 @@ export function Register() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/app', { replace: true });
+      navigate(returnTo, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

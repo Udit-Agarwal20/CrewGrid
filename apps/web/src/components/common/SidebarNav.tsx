@@ -154,3 +154,4 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     </aside>
   );
 }
+

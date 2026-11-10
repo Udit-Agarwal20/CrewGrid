@@ -38,3 +38,4 @@ export function SeatProgress({ memberCount, maxSize, minSize, className = '' }: 
     </div>
   );
 }
+
