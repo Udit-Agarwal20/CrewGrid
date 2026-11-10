@@ -75,7 +75,7 @@ export class MembershipService {
     let wasReplayed = false;
     try {
       const data = await withDomainTransaction(async ({ session }) => {
-        const inTxExisting = await idempotencyService.findRecord(actorId, scope, key);
+        const inTxExisting = await idempotencyService.findRecord(actorId, scope, key, session);
         if (inTxExisting) {
           if (inTxExisting.requestHash !== requestHash) {
             throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency key reused with different request payload');
@@ -103,13 +103,17 @@ export class MembershipService {
 
       return { data, replayed: wasReplayed };
     } catch (err: any) {
-      if (err.code === 11000 || err.message?.includes('duplicate key') || err.message?.includes('E11000')) {
+      // If another concurrent request with the same idempotency key succeeded, return the replayed response
+      for (let retry = 0; retry < 5; retry++) {
         const recheck = await idempotencyService.findRecord(actorId, scope, key);
         if (recheck) {
           if (recheck.requestHash !== requestHash) {
             throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency key reused with different request payload');
           }
           return { data: recheck.responseBody as T, replayed: true };
+        }
+        if (retry < 4) {
+          await new Promise((resolve) => setTimeout(resolve, 20 * (retry + 1)));
         }
       }
       throw err;

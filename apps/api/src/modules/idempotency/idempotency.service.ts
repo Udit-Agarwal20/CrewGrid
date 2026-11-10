@@ -24,8 +24,13 @@ export class IdempotencyService {
     return getDatabase().collection<IdempotencyRecord>('idempotency_keys');
   }
 
-  async findRecord(actorId: ObjectId, scope: string, key: string): Promise<IdempotencyRecord | null> {
-    return this.collection.findOne({ actorId, scope, key });
+  async findRecord(
+    actorId: ObjectId,
+    scope: string,
+    key: string,
+    session?: ClientSession
+  ): Promise<IdempotencyRecord | null> {
+    return this.collection.findOne({ actorId, scope, key }, { session });
   }
 
   async recordSuccess(
