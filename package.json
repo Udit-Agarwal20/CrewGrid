@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:smoke": "pnpm --filter @crewgrid/api test:smoke",
     "verify:invariants": "tsx scripts/invariants/verify.ts",
+    "seed:scale": "tsx scripts/seed-scale.ts --confirm",
     "mongo:start": "./scripts/local-mongo-rs.sh start",
     "mongo:stop": "./scripts/local-mongo-rs.sh stop",
     "mongo:status": "./scripts/local-mongo-rs.sh status",

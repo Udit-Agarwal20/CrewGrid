@@ -1,0 +1,94 @@
+{
+  "benchmarkDb": "crewgrid_bench",
+  "timestamp": "2026-11-10T17:37:43.402Z",
+  "seedDurationSeconds": "0.98",
+  "dataScale": {
+    "totalParticipants": 10000,
+    "assignedParticipants": 4836,
+    "unassignedParticipants": 5164,
+    "totalTeams": 2000,
+    "fullTeams": 393,
+    "formingTeams": 1607,
+    "totalMemberships": 4836,
+    "auditRecords": 4836,
+    "outboxRecords": 4836
+  },
+  "databaseStats": {
+    "dbName": "crewgrid_bench",
+    "dataSizeMB": "8.91",
+    "storageSizeMB": "0.55",
+    "totalIndexSizeMB": "1.86",
+    "collections": {
+      "users": {
+        "documentCount": 10000,
+        "indexCount": 6,
+        "indexes": [
+          "_id_",
+          "uniq_email",
+          "uniq_handle",
+          "candidate_discovery",
+          "candidate_skills",
+          "candidate_timezone"
+        ]
+      },
+      "hackathons": {
+        "documentCount": 1,
+        "indexCount": 2,
+        "indexes": [
+          "_id_",
+          "uniq_hackathon_slug"
+        ]
+      },
+      "teams": {
+        "documentCount": 2000,
+        "indexCount": 5,
+        "indexes": [
+          "_id_",
+          "board_active_updated",
+          "board_seats",
+          "board_skills",
+          "board_name_search"
+        ]
+      },
+      "memberships": {
+        "documentCount": 4836,
+        "indexCount": 3,
+        "indexes": [
+          "_id_",
+          "uniq_member_per_event",
+          "team_roster_succession"
+        ]
+      },
+      "audit_events": {
+        "documentCount": 4836,
+        "indexCount": 2,
+        "indexes": [
+          "_id_",
+          "team_audit_timeline"
+        ]
+      },
+      "realtime_events": {
+        "documentCount": 4836,
+        "indexCount": 3,
+        "indexes": [
+          "_id_",
+          "event_dispatch",
+          "event_ttl"
+        ]
+      }
+    }
+  },
+  "invariantVerification": {
+    "status": "PASSED",
+    "violationsCount": 0,
+    "rulesChecked": [
+      "I-01: Unique active membership per hackathon",
+      "I-02: Team memberCount matches memberships count",
+      "I-03: Team capacity limits strictly enforced",
+      "I-04: Leader membership presence invariant",
+      "I-05: Audit and outbox record atomicity",
+      "I-06: Join request single-acceptance",
+      "I-07: Single-use invite consumption"
+    ]
+  }
+}
