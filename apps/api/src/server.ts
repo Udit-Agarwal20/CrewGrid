@@ -5,11 +5,31 @@ import { outboxDispatcher } from './realtime/dispatcher.js';
 import { connectionManager } from './realtime/connection.manager.js';
 import { env } from './config/env.js';
 import { logger } from './observability/logger.js';
+import { Db } from 'mongodb';
+
+async function ensureDefaultHackathon(db: Db): Promise<void> {
+  const existing = await db.collection('hackathons').findOne({ slug: 'hack4hack-2026' });
+  if (!existing) {
+    logger.info('Initializing default hackathon: hack4hack-2026');
+    const now = new Date();
+    await db.collection('hackathons').insertOne({
+      slug: 'hack4hack-2026',
+      title: 'Hack4Hack Crew Hiring Challenge 2026',
+      minTeamSize: 2,
+      maxTeamSize: 5,
+      active: true,
+      createdAt: now,
+      startsAt: now,
+      endsAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    });
+  }
+}
 
 async function bootstrap() {
   try {
     const { db } = await connectToDatabase();
     await initializeIndexes(db);
+    await ensureDefaultHackathon(db);
     await outboxDispatcher.start();
 
     const app = createApp();

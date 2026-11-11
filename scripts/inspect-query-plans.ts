@@ -36,20 +36,8 @@ export async function inspectQueryPlans(): Promise<QueryPlanSummary[]> {
     }
     const hackathonId = hackathon._id;
 
-    // Pick a sample team and user from the benchmark db
-    const sampleTeam = await db.collection('teams').findOne({ hackathonId, memberCount: { $gt: 1 } });
-    const sampleUser = await db.collection('users').findOne({});
-
-    if (!sampleTeam || !sampleUser) {
-      throw new Error('Sample team or user not found. Run pnpm seed:scale first.');
-    }
-
-    const sampleTeamId = sampleTeam._id;
-    const sampleUserId = sampleUser._id;
-    const sampleCursorDate = sampleTeam.updatedAt;
-
     // 1. Team Discovery: Live Board (Hackathon, Active, Sorted by updatedAt desc, _id desc)
-    console.log('1. Analyzing Team Discovery (Live Board)...');
+    console.log('1. Analyzing Team Discovery (Live Board Page 1)...');
     const q1 = await db
       .collection('teams')
       .find({ hackathonId, deletedAt: null })
@@ -60,23 +48,46 @@ export async function inspectQueryPlans(): Promise<QueryPlanSummary[]> {
     const s1 = extractStats(q1, 'Team Discovery (Default Board Page 1)', 'teams');
     results.push(s1);
 
-    // 2. Team Discovery with Cursor Pagination
-    console.log('2. Analyzing Team Discovery with Cursor Pagination...');
+    // Fetch Page 1 documents to extract real cursor for Page 2
+    const page1Teams = await db
+      .collection('teams')
+      .find({ hackathonId, deletedAt: null })
+      .sort({ updatedAt: -1, _id: -1 })
+      .limit(12)
+      .toArray();
+
+    if (page1Teams.length < 12) {
+      throw new Error(`Expected at least 12 teams in Page 1, found ${page1Teams.length}.`);
+    }
+
+    const lastPage1Team = page1Teams[page1Teams.length - 1];
+    const cursorDate = lastPage1Team.updatedAt;
+    const cursorId = lastPage1Team._id;
+    const sampleTeamId = lastPage1Team._id;
+
+    const sampleUser = await db.collection('users').findOne({});
+    if (!sampleUser) {
+      throw new Error('Sample user not found. Run pnpm seed:scale first.');
+    }
+    const sampleUserId = sampleUser._id;
+
+    // 2. Team Discovery with Cursor Pagination (Page 2)
+    console.log('2. Analyzing Team Discovery with Cursor Pagination (Page 2)...');
     const q2 = await db
       .collection('teams')
       .find({
         hackathonId,
         deletedAt: null,
         $or: [
-          { updatedAt: { $lt: sampleCursorDate } },
-          { updatedAt: sampleCursorDate, _id: { $lt: sampleTeamId } }
+          { updatedAt: { $lt: cursorDate } },
+          { updatedAt: cursorDate, _id: { $lt: cursorId } }
         ]
       })
       .sort({ updatedAt: -1, _id: -1 })
       .limit(12)
       .explain('executionStats');
 
-    const s2 = extractStats(q2, 'Team Discovery (Cursor Pagination)', 'teams');
+    const s2 = extractStats(q2, 'Team Discovery (Cursor Pagination Page 2)', 'teams');
     results.push(s2);
 
     // 3. Team Discovery with Skill Filter
@@ -306,22 +317,22 @@ All critical query paths used in the live team board, candidate teammate matchin
 - **Endpoint:** \`GET /api/v1/hackathons/:id/teams?cursor=...&limit=12\`
 - **Filter:** \`{ hackathonId: ObjectId, deletedAt: null, $or: [ { updatedAt: { $lt: cursorDate } }, { updatedAt: cursorDate, _id: { $lt: cursorId } } ] }\`
 - **Sort:** \`{ updatedAt: -1, _id: -1 }\`
-- **Winning Index:** \`board_active_updated\`
-- **Behavior:** Compound equality-and-range index traversal guarantees $O(1)$ page traversal cost without offset scanning.
+- **Winning Index:** \`board_active_updated\` on \`{ hackathonId: 1, deletedAt: 1, updatedAt: -1, _id: -1 }\`
+- **Behavior:** Compound equality-and-range index traversal guarantees $O(1)$ page traversal cost without offset scanning. Successfully examined 12 keys, scanned 12 documents, and returned 12 documents with zero in-memory sorting.
 
 ### 2.3 Team Discovery with Skill Filter
 - **Endpoint:** \`GET /api/v1/hackathons/:id/teams?skill=TypeScript&limit=12\`
 - **Filter:** \`{ hackathonId: ObjectId, deletedAt: null, requiredSkills: 'TypeScript' }\`
 - **Sort:** \`{ updatedAt: -1, _id: -1 }\`
-- **Winning Index:** \`board_skills\` on \`{ hackathonId: 1, deletedAt: 1, requiredSkills: 1, updatedAt: -1 }\`
-- **Behavior:** Multikey index scan filters teams matching required skill efficiently.
+- **Winning Index:** \`board_skills\` on \`{ hackathonId: 1, deletedAt: 1, requiredSkills: 1, updatedAt: -1, _id: -1 }\`
+- **Behavior:** Multikey index scan filters teams matching required skill efficiently without blocking sorts.
 
 ### 2.4 Team Details & Roster Succession Lookups
 - **Endpoints:** \`GET /api/v1/teams/:id\`, \`GET /api/v1/teams/:id/members\`
 - **Winning Indexes:**
   - \`_id_\` on \`teams\` for single-document team fetch.
   - \`team_roster_succession\` on \`{ teamId: 1, joinedAt: 1, _id: 1 }\` for deterministic seniority-based member ordering.
-- **Behavior:** Ultra-fast point queries resolving in < 1 ms.
+- **Behavior:** Direct index point queries resolving in sub-millisecond execution.
 
 ### 2.5 Teammate Candidate Discovery
 - **Endpoint:** \`GET /api/v1/hackathons/:id/teammates?limit=12\`
@@ -332,7 +343,17 @@ All critical query paths used in the live team board, candidate teammate matchin
 
 ---
 
-## 3. Optimization Conclusions
+## 3. Technical Timing Disclosure & Measurement Precision
+
+> [!NOTE]
+> **Why MongoDB Reports executionTimeMillis: 0:**  
+> MongoDB's query profiler and executionStats timer report elapsed execution time in integer milliseconds rounded down. When queries are fully covered or index-supported on cached working sets (WiredTiger in-memory buffer cache), the storage engine locates keys and documents within tens or hundreds of microseconds (< 1.0 ms).  
+> In MongoDB's integer accounting, < 1 ms displays as 0 ms.  
+> This metric confirms that **no expensive disk seeks, table-scans (COLLSCAN), or in-memory sorting buffers** were triggered. It does **not** claim zero end-to-end network latency or zero HTTP request turnaround time (which includes Node.js event-loop scheduling, JSON serialization, TLS, and wire transit). Under full HTTP load, end-to-end p95 response time is measured via k6 (88.83 ms).
+
+---
+
+## 4. Optimization Conclusions
 
 1. **Zero COLLSCAN in Critical Paths:** Every public query leverages a dedicated compound index with prefix alignment to the query predicate.
 2. **Zero In-Memory Sorts:** Every sorted pagination query (\`teams\` and \`users\`) uses index-provided sorting via compound \`updatedAt\` and \`_id\` tails.

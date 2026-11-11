@@ -12,6 +12,7 @@ build/
 .mongo-data/
 *.log
 bin/
+benchmarks/sessions.json
 
 # Environment variables
 .env

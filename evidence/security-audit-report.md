@@ -13,7 +13,7 @@
 | Security Vector | Threat / Attack Surface | Control / Implementation | Verified Invariant | Audit Test Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **Authentication Boundary** | Unauthenticated mutation of teams, invites, requests, and profiles | `requireAuth` session middleware verifying cryptographic SHA-256 session hash against active sessions collection | Missing or invalid cookie immediately returns HTTP 401 `UNAUTHENTICATED` with standard error envelope. | **PASS** |
-| **CSRF Defense** | Cross-Site Request Forgery via browser session cookie replay | `csrfMiddleware` validating cryptographically signed `X-CSRF-Token` header on all non-safe HTTP methods (POST, PATCH, DELETE) | State mutations lacking or with tampered `X-CSRF-Token` are rejected with HTTP 403 `CSRF_FAILED`. Safe GET requests remain accessible. | **PASS** |
+| **CSRF Defense** | Cross-Site Request Forgery via browser session cookie replay | `csrfMiddleware` validating `Origin` header and constant-time matching of server-stored per-session random CSRF token (`X-CSRF-Token` header) on all state-changing HTTP methods (POST, PATCH, DELETE) | State mutations lacking or with tampered `X-CSRF-Token` are rejected with HTTP 403 `CSRF_FAILED`. Safe GET requests remain accessible. | **PASS** |
 | **RBAC / Privilege Escalation** | Regular team members or strangers creating invites, editing team info, or approving members | Role verification in service layer and transactional atomic assertions checking `team.leaderId.equals(actorId)` | Non-leader members receive HTTP 403 `NOT_TEAM_LEADER`. | **PASS** |
 | **Invite Token Secrecy** | Database compromise or query logging exposing plaintext invitation tokens | 256-bit cryptographically secure random token generation (`crypto.randomBytes(32)`), stored exclusively as SHA-256 hash | Plaintext token is never persisted in MongoDB. Database stores only 64-hex-char `tokenHash`. | **PASS** |
 | **Invite Replay / Reuse** | Single-use invite link brute-forcing or multi-user redemption | Atomic MongoDB conditional write setting `usedAt: new Date()` inside replica set transaction | Second redemption attempt immediately receives HTTP 409 `INVITE_USED`. | **PASS** |
@@ -47,3 +47,4 @@
       Tests  13 passed (13)
    Duration  2.50s
 ```
+

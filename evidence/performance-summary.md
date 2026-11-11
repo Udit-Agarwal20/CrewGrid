@@ -85,3 +85,4 @@ Each VU executed a representative user flow across every iteration:
 2. **Stable Keyset Pagination:** Cursor-based pagination uses index boundaries instead of inefficient `skip(N)` operations, ensuring $O(1)$ query time at arbitrary depth.
 3. **Session Verification Speed:** Fast single-document point lookup on indexed `sessions` (`tokenHash: 1`).
 4. **Optimized Projections:** Domain mapping functions strip internal MongoDB fields efficiently before sending JSON envelopes.
+

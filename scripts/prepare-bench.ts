@@ -13,6 +13,10 @@ export async function prepareBenchmarkSessions() {
     'mongodb://127.0.0.1:27017/crewgrid_bench?replicaSet=rs0&directConnection=true';
   const targetDb = process.env.MONGODB_DB || 'crewgrid_bench';
 
+  if (targetDb.toLowerCase().includes('prod') || mongoUri.toLowerCase().includes('prod')) {
+    throw new Error('Refusing to prepare benchmark sessions on a production database!');
+  }
+
   console.log(`Preparing 100 authenticated sessions in ${targetDb}...`);
   const client = new MongoClient(mongoUri);
   await client.connect();
