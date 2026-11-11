@@ -8,6 +8,9 @@ import { logger } from './observability/logger.js';
 import { Db } from 'mongodb';
 
 async function ensureDefaultHackathon(db: Db): Promise<void> {
+  if (process.env.NODE_ENV === 'test') {
+    return;
+  }
   const existing = await db.collection('hackathons').findOne({ slug: 'hack4hack-2026' });
   if (!existing) {
     logger.info('Initializing default hackathon: hack4hack-2026');

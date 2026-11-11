@@ -12,6 +12,7 @@ export default async function globalSetup() {
   const collections = [
     'users',
     'sessions',
+    'hackathons',
     'teams',
     'memberships',
     'join_requests',
