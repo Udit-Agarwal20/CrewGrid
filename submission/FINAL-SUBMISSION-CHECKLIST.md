@@ -2,8 +2,8 @@
 
 **Competition:** Hack4Hack Crew Hiring Challenge 2026 — Problem Statement 1  
 **Submission Deadline:** Sunday, November 15, 2026 at 23:59 IST  
-**Verified Git Commit:** `4f9c829` (and subsequent M6 documentation commits)  
-**Hosted CI Run:** [GitHub Actions Run #42869098437](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42869098437) — 100% SUCCESS  
+**Verified Git Commit:** `0253267` (and latest M6 documentation commits)  
+**Hosted CI Run:** [GitHub Actions Run #42967189517](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42967189517) — 100% SUCCESS  
 **Live Deployed Application:** [https://crewgrid-api.onrender.com](https://crewgrid-api.onrender.com)  
 
 ---
@@ -21,7 +21,7 @@
 | **O-07** | Auth, leader-only authorization, entropy & rate-limit, validation | Argon2id (`m=19456, t=2, p=4`), HttpOnly cookies, CSRF header checks, Zod contracts, sliding rate-limit | [`apps/api/test/security.audit.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/security.audit.test.ts), [`evidence/security-audit-report.md`](file:///Users/uditagarwal/Desktop/CrewGrid/evidence/security-audit-report.md) | **PASSED** |
 | **O-08** | Audit log of every team change (actor, action, time) | Transactional `audit_events` collection committed atomically with domain mutations | [`apps/api/test/team.integration.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/team.integration.test.ts) | **PASSED** |
 | **O-09** | Teammate ranking endpoint by skills and timezone | Deterministic scoring algorithm: 70% skill complementarity + 30% timezone alignment | [`apps/api/test/matching.unit.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/matching.unit.test.ts) | **PASSED** |
-| **O-10** | $\ge 20$ API tests including race in GitHub Actions | Automated GitHub Actions CI workflow running unit, integration, race, and invariant tests | 104 API tests in [`apps/api/test`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test) (CI Run #42869098437) | **PASSED** |
+| **O-10** | $\ge 20$ API tests including race in GitHub Actions | Automated GitHub Actions CI workflow running unit, integration, race, and invariant tests | 104 API tests in [`apps/api/test`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test) (CI Run #42967189517) | **PASSED** |
 | **O-11** | 10k users + 2k teams seed; 100 concurrent; board p95 < 200 ms | Seed script in 0.98s; k6 100-VU load test achieving board p95 of **88.83 ms** (0.00% error rate) | [`evidence/performance-summary.md`](file:///Users/uditagarwal/Desktop/CrewGrid/evidence/performance-summary.md), [`docs/LOAD-TEST-REPORT.md`](file:///Users/uditagarwal/Desktop/CrewGrid/docs/LOAD-TEST-REPORT.md) | **PASSED** |
 | **O-12** | Whole-flow React UI, mobile- and keyboard-usable | Accessible React 19 SPA shell, keyboard modal navigation, and mobile viewports (375x667) | [`e2e/crewgrid.spec.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/e2e/crewgrid.spec.ts) (10/10 passing) | **PASSED** |
 | **O-13** | Working publicly accessible deployment on free tier | Hosted on Render with MongoDB Atlas replica set, single-origin SPA + API serving | Live URL: [https://crewgrid-api.onrender.com](https://crewgrid-api.onrender.com) | **PASSED** |
@@ -53,5 +53,5 @@
 | **One-Page Design Document** | Attached `docs/FINAL-DESIGN-ONE-PAGER.pdf` |
 | **Load Test Report** | `https://github.com/Udit-Agarwal20/CrewGrid/blob/main/docs/LOAD-TEST-REPORT.md` |
 | **Demonstration Video URL** | *(Insert YouTube/Drive link after recording using `submission/VIDEO-SCRIPT.md`)* |
-| **Verified Git Commit Hash** | `4f9c8296511ef1cbea9cd9c474959666db2ee2e3` (or latest M6 commit) |
-| **CI Verification Proof** | `https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42869098437` |
+| **Verified Git Commit Hash** | `0253267` (or latest M6 commit) |
+| **CI Verification Proof** | `https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42967189517` |
