@@ -319,7 +319,7 @@ npx tsx scripts/inspect-query-plans.ts
 - **API Health Check:** [https://crewgrid-api.onrender.com/health](https://crewgrid-api.onrender.com/health)
 - **API Readiness Check:** [https://crewgrid-api.onrender.com/ready](https://crewgrid-api.onrender.com/ready)
 - **GitHub Repository:** [https://github.com/Udit-Agarwal20/CrewGrid](https://github.com/Udit-Agarwal20/CrewGrid)
-- **Verified GitHub Actions CI Run:** [Run #43369567196](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43369567196) (100% Green across 104 API integration tests, 14 web unit tests, and 16 Playwright E2E tests)
+- **Verified GitHub Actions CI Run:** [Run #43374684523](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43374684523) (100% Green across 104 API integration tests, 14 web unit tests, and 16 Playwright E2E tests)
 - **Concurrency Race Proof Evidence:** [`evidence/concurrency-evidence.md`](file:///Users/uditagarwal/Desktop/CrewGrid/evidence/concurrency-evidence.md)
 - **Database Invariant Check Evidence:** [`scripts/invariants/verify.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/scripts/invariants/verify.ts)
 - **Load Test Report:** [`docs/LOAD-TEST-REPORT.md`](file:///Users/uditagarwal/Desktop/CrewGrid/docs/LOAD-TEST-REPORT.md)

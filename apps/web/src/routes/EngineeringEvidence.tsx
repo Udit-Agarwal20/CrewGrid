@@ -134,13 +134,13 @@ export function EngineeringEvidence() {
             </div>
             <span className="hidden sm:inline text-[#35405A]">|</span>
             <a
-              href="https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43369567196"
+              href="https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43374684523"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[#9BF5CC] hover:underline font-mono"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              GitHub Actions CI Run #43369567196 (Passing)
+              GitHub Actions CI Run #43374684523 (Passing)
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
