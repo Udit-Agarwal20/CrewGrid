@@ -200,4 +200,60 @@ describe('useEvents Named-Event Handling Tests (Issue 2)', () => {
 
     expect(es.readyState).toBe(MockEventSource.CLOSED);
   });
+
+  it('does not open SSE connection and remains disconnected when hackathonId is invalid or "default"', async () => {
+    // Test with "default"
+    const { result: defaultResult } = renderHook(() => useEvents('default'), {
+      wrapper: createWrapper()
+    });
+    expect(defaultResult.current.status).toBe('disconnected');
+    expect(MockEventSource.instances.length).toBe(0);
+
+    // Test with undefined
+    const { result: undefResult } = renderHook(() => useEvents(undefined), {
+      wrapper: createWrapper()
+    });
+    expect(undefResult.current.status).toBe('disconnected');
+    expect(MockEventSource.instances.length).toBe(0);
+
+    // Test with arbitrary non-hex string
+    const { result: invalidResult } = renderHook(() => useEvents('not-a-valid-object-id'), {
+      wrapper: createWrapper()
+    });
+    expect(invalidResult.current.status).toBe('disconnected');
+    expect(MockEventSource.instances.length).toBe(0);
+  });
+
+  it('stops reconnecting when endpoint returns non-retryable HTTP 422 error', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      status: 422,
+      ok: false
+    } as any);
+
+    const hackathonId = '650c00000000000000000099';
+    const { result } = renderHook(() => useEvents(hackathonId), {
+      wrapper: createWrapper()
+    });
+
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe('connected');
+    });
+
+    const es = MockEventSource.instances[0];
+
+    // Simulate SSE error
+    act(() => {
+      if (es.onerror) {
+        es.onerror(new Event('error'));
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    // Reconnection is aborted because HTTP 422 is non-retryable
+    expect(MockEventSource.instances.length).toBe(1);
+    expect(result.current.status).toBe('disconnected');
+  });
 });

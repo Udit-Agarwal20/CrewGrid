@@ -28,3 +28,4 @@
 2. Terminal font size set to 16pt+ with high-contrast color scheme (e.g. Dracula, Solarized Dark).
 3. Browser zoom set to 110%–125% for high readability on 1080p displays.
 4. Pre-test all browser actions in incognito before starting recording.
+

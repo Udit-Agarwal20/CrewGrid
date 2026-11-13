@@ -1,8 +1,9 @@
-import { Routes, Route, Navigate } from 'react-router';
+import { Routes, Route, Navigate, useParams } from 'react-router';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
-import { HackathonProvider } from './context/HackathonContext';
+import { HackathonProvider, useHackathon } from './context/HackathonContext';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { isValidObjectId } from './utils/validation';
 
 // Routes
 import { Home } from './routes/Home';
@@ -18,6 +19,32 @@ import { Profile } from './routes/Profile';
 import { InviteRedeem } from './routes/InviteRedeem';
 import { EngineeringEvidence } from './routes/EngineeringEvidence';
 import { NotFound } from './routes/NotFound';
+
+function EventRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/events/${id}/teams`} replace />;
+}
+
+function TeamRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/teams/${id}`} replace />;
+}
+
+function EventsIndexRedirect() {
+  const { activeHackathon, hackathons, isLoading } = useHackathon();
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#0B1020] text-[#9BF5CC]">
+        Loading hackathon...
+      </div>
+    );
+  }
+  const targetId = activeHackathon?.id || (hackathons.length > 0 ? hackathons[0].id : null);
+  if (targetId && isValidObjectId(targetId)) {
+    return <Navigate to={`/app/events/${targetId}/teams`} replace />;
+  }
+  return <Navigate to="/app" replace />;
+}
 
 export function App() {
   return (
@@ -47,6 +74,15 @@ export function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/app/events"
+              element={
+                <ProtectedRoute>
+                  <EventsIndexRedirect />
                 </ProtectedRoute>
               }
             />
@@ -97,8 +133,9 @@ export function App() {
             />
 
             {/* Convenient aliases & redirects */}
-            <Route path="/events/:id" element={<Navigate to="/app/events/:id/teams" replace />} />
-            <Route path="/teams/:id" element={<Navigate to="/app/teams/:id" replace />} />
+            <Route path="/events" element={<EventsIndexRedirect />} />
+            <Route path="/events/:id" element={<EventRedirect />} />
+            <Route path="/teams/:id" element={<TeamRedirect />} />
 
             {/* 404 Fallback */}
             <Route path="*" element={<NotFound />} />

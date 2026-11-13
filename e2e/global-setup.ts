@@ -47,6 +47,23 @@ export default async function globalSetup() {
     { upsert: true }
   );
 
+  // Seed second active hackathon for switching tests
+  await db.collection('hackathons').updateOne(
+    { _id: new ObjectId('650c00000000000000000002') },
+    {
+      $set: {
+        slug: 'ai-agents-challenge',
+        title: 'AI Agents Challenge 2026',
+        minTeamSize: 2,
+        maxTeamSize: 4,
+        startsAt: new Date(),
+        endsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        active: true
+      }
+    },
+    { upsert: true }
+  );
+
   await client.close();
 }
 

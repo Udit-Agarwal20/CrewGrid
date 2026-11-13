@@ -4,6 +4,7 @@ import { SidebarNav } from './SidebarNav';
 import { LiveConnectionStatus } from './LiveConnectionStatus';
 import { useHackathon } from '../../context/HackathonContext';
 import { useEvents } from '../../hooks/useEvents';
+import { isValidObjectId } from '../../utils/validation';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,7 +14,11 @@ interface AppShellProps {
 export function AppShell({ children, hackathonId }: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { activeHackathon } = useHackathon();
-  const effectiveHackathonId = hackathonId || activeHackathon?.id;
+  const effectiveHackathonId = (hackathonId && isValidObjectId(hackathonId))
+    ? hackathonId
+    : (activeHackathon && isValidObjectId(activeHackathon.id))
+      ? activeHackathon.id
+      : undefined;
   const { status, lastActivity } = useEvents(effectiveHackathonId);
 
   return (

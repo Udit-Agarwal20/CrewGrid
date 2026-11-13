@@ -9,16 +9,18 @@ import { SkillPill } from '../common/SkillPill';
 interface CreateTeamModalProps {
   isOpen: boolean;
   onClose: () => void;
+  hackathonId?: string;
 }
 
-export function CreateTeamModal({ isOpen, onClose }: CreateTeamModalProps) {
+export function CreateTeamModal({ isOpen, onClose, hackathonId }: CreateTeamModalProps) {
   const navigate = useNavigate();
-  const { activeHackathon } = useHackathon();
+  const { activeHackathon, hackathons } = useHackathon();
+  const targetHackathon = (hackathonId ? hackathons.find((h) => h.id === hackathonId) : null) || activeHackathon;
   const { success, error: toastError } = useToast();
   const createTeamMutation = useCreateTeam();
 
-  const minLimit = activeHackathon?.minTeamSize || 2;
-  const maxLimit = activeHackathon?.maxTeamSize || 5;
+  const minLimit = targetHackathon?.minTeamSize || 2;
+  const maxLimit = targetHackathon?.maxTeamSize || 5;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -81,9 +83,14 @@ export function CreateTeamModal({ isOpen, onClose }: CreateTeamModalProps) {
       return;
     }
 
+    if (!targetHackathon?.id) {
+      setErrorMessage('A valid hackathon must be selected to create a team.');
+      return;
+    }
+
     try {
       const created = await createTeamMutation.mutateAsync({
-        hackathonId: activeHackathon.id,
+        hackathonId: targetHackathon.id,
         input: {
           name: name.trim(),
           description: description.trim(),

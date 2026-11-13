@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RealtimeEventEnvelope, RealtimeEventType } from '@crewgrid/contracts';
+import { isValidObjectId } from '../utils/validation';
 
 export type ConnectionState = 'connected' | 'connecting' | 'disconnected';
 
@@ -15,12 +16,15 @@ export const SUPPORTED_SSE_EVENTS: RealtimeEventType[] = [
   'leader.transferred'
 ];
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 export function useEvents(hackathonId: string | undefined) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<ConnectionState>('disconnected');
   const [lastActivity, setLastActivity] = useState<Date | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
 
   const invalidateQueriesForEvent = useCallback(
     (event: RealtimeEventEnvelope) => {
@@ -46,13 +50,15 @@ export function useEvents(hackathonId: string | undefined) {
   );
 
   useEffect(() => {
-    if (!hackathonId) {
+    // Validate hackathonId before establishing any connection
+    if (!isValidObjectId(hackathonId)) {
       setStatus('disconnected');
       return;
     }
 
     let isCancelled = false;
     let currentEs: EventSource | null = null;
+    reconnectAttemptsRef.current = 0;
 
     const handleEvent = (messageEvent: MessageEvent) => {
       if (isCancelled) return;
@@ -91,6 +97,7 @@ export function useEvents(hackathonId: string | undefined) {
         if (!isCancelled) {
           setStatus('connected');
           setLastActivity(new Date());
+          reconnectAttemptsRef.current = 0;
         }
       };
 
@@ -102,14 +109,33 @@ export function useEvents(hackathonId: string | undefined) {
         es.addEventListener(eventName, handleEvent as EventListener);
       }
 
-      es.onerror = () => {
+      es.onerror = async () => {
         if (isCancelled) return;
         setStatus('disconnected');
         cleanupListeners(es);
         es.close();
 
-        // Reconnect after 3 seconds with jitter
-        const delay = 3000 + Math.floor(Math.random() * 1000);
+        // Check if error was a non-retryable 4xx client response (401, 403, 404, 422)
+        try {
+          const probe = await fetch(url, { method: 'GET', credentials: 'include' });
+          if (probe.status >= 400 && probe.status < 500) {
+            // Non-retryable HTTP 4xx error. Terminate reconnect attempts.
+            return;
+          }
+        } catch {
+          // Network offline / connection drop, retryable
+        }
+
+        // Check if maximum reconnect attempts reached
+        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          return;
+        }
+
+        reconnectAttemptsRef.current += 1;
+        const delay = Math.min(
+          30000,
+          1000 * Math.pow(1.5, reconnectAttemptsRef.current) + Math.floor(Math.random() * 1000)
+        );
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = setTimeout(() => {
           if (!isCancelled) {
@@ -127,6 +153,7 @@ export function useEvents(hackathonId: string | undefined) {
         queryClient.invalidateQueries({ queryKey: ['teams', hackathonId] });
         queryClient.invalidateQueries({ queryKey: ['my-team', hackathonId] });
         if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
+          reconnectAttemptsRef.current = 0;
           connect();
         }
       }

@@ -5,7 +5,8 @@ import {
   Search,
   Sparkles,
   UserPlus,
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useMyTeam } from '../hooks/useTeams';
@@ -17,6 +18,7 @@ import { ScoreBreakdown } from '../components/matching/ScoreBreakdown';
 import { SkeletonCard } from '../components/common/SkeletonCard';
 import { ErrorPanel } from '../components/common/ErrorPanel';
 import { InviteModal } from '../components/invites/InviteModal';
+import { isValidObjectId } from '../utils/validation';
 
 const COMMON_TIMEZONES = [
   'All Timezones',
@@ -34,9 +36,10 @@ const COMMON_TIMEZONES = [
 export function TeammateDiscovery() {
   const { id: hackathonId } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { data: myTeam } = useMyTeam(hackathonId);
+  const validHackathonId = isValidObjectId(hackathonId) ? hackathonId : undefined;
+  const { data: myTeam } = useMyTeam(validHackathonId);
 
-  const isLeader = myTeam && myTeam.leaderId === user?.id;
+  const isLeader = Boolean(myTeam && myTeam.leaderId === user?.id);
 
   const [activeTab, setActiveTab] = useState<'all' | 'suggestions'>('all');
   const [skillFilter, setSkillFilter] = useState('');
@@ -50,7 +53,7 @@ export function TeammateDiscovery() {
     isLoading: loadingCandidates,
     error: candidateError,
     refetch: refetchCandidates
-  } = useTeammates(hackathonId, {
+  } = useTeammates(validHackathonId, {
     skill: skillFilter.trim() || undefined,
     timezone: timezoneParam,
     limit: 50
@@ -63,13 +66,37 @@ export function TeammateDiscovery() {
 
   const candidates = candidateResult?.data || [];
 
+  if (hackathonId === 'default') {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#9BF5CC]" />
+          <p className="text-sm font-medium text-[#B5C1D4]">Redirecting to active hackathon...</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!isValidObjectId(hackathonId)) {
+    return (
+      <AppShell>
+        <div className="max-w-xl mx-auto py-12">
+          <ErrorPanel
+            title="Invalid Event Identifier"
+            message="The requested hackathon ID is invalid or malformed. Please select an active event from the navigation menu."
+          />
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell hackathonId={hackathonId}>
       <div className="space-y-6">
         {/* Navigation Breadcrumb */}
         <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
           <Link
-            to={hackathonId ? `/app/events/${hackathonId}/teams` : '/app'}
+            to={`/app/events/${hackathonId}/teams`}
             className="hover:text-[#9BF5CC] flex items-center gap-1 transition"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -173,15 +200,14 @@ export function TeammateDiscovery() {
               )}
             </div>
 
-            {candidateError && (
+            {/* Candidate Results States: Error, Loading, Empty, and Success are mutually exclusive */}
+            {candidateError ? (
               <ErrorPanel
                 title="Could not load candidates"
                 message={(candidateError as Error).message}
                 onRetry={() => refetchCandidates()}
               />
-            )}
-
-            {loadingCandidates ? (
+            ) : loadingCandidates ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <SkeletonCard className="h-48" />
                 <SkeletonCard className="h-48" />

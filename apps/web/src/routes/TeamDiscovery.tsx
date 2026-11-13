@@ -12,6 +12,7 @@ import { useTeamBoard, useMyTeam } from '../hooks/useTeams';
 import { useMyRequests, useCreateJoinRequest } from '../hooks/useRequests';
 import { useToast } from '../context/ToastContext';
 import { TeamResponse } from '@crewgrid/contracts';
+import { isValidObjectId } from '../utils/validation';
 
 export function TeamDiscovery() {
   const { id: hackathonId } = useParams<{ id: string }>();
@@ -25,7 +26,9 @@ export function TeamDiscovery() {
   const [joinModalTeam, setJoinModalTeam] = useState<TeamResponse | null>(null);
   const [joinMessage, setJoinMessage] = useState('');
 
-  const { data: myTeam } = useMyTeam(hackathonId);
+  const validHackathonId = isValidObjectId(hackathonId) ? hackathonId : undefined;
+
+  const { data: myTeam } = useMyTeam(validHackathonId);
   const { data: myRequests = [] } = useMyRequests();
   const createJoinRequestMutation = useCreateJoinRequest();
   const { success, error: toastError } = useToast();
@@ -36,7 +39,7 @@ export function TeamDiscovery() {
     isError,
     error,
     refetch
-  } = useTeamBoard(hackathonId, {
+  } = useTeamBoard(validHackathonId, {
     search: search.trim() || undefined,
     skill: skill.trim() || undefined,
     onlyOpen,
@@ -83,8 +86,32 @@ export function TeamDiscovery() {
     }
   };
 
+  if (hackathonId === 'default') {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#9BF5CC]" />
+          <p className="text-sm font-medium text-[#B5C1D4]">Redirecting to active hackathon...</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!isValidObjectId(hackathonId)) {
+    return (
+      <AppShell>
+        <div className="max-w-xl mx-auto py-12">
+          <ErrorPanel
+            title="Invalid Event Identifier"
+            message="The requested hackathon ID is invalid or malformed. Please select an active event from the navigation menu."
+          />
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell>
+    <AppShell hackathonId={hackathonId}>
       <PageHeader
         title="Discover Teams"
         description="Browse squads forming for this event. Apply for open seats in real time."
@@ -198,26 +225,26 @@ export function TeamDiscovery() {
           </div>
 
           {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-8 pt-6 border-t border-[#35405A]">
+          <div className="flex items-center justify-between mt-8 pt-4 border-t border-[#35405A]">
             <button
               type="button"
               onClick={handlePrevPage}
               disabled={cursorHistory.length === 0}
-              className="px-4 py-2 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] flex items-center gap-1.5 transition disabled:opacity-40 disabled:pointer-events-none"
+              className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition"
             >
               <ChevronLeft className="w-4 h-4" />
               Previous
             </button>
 
             <span className="text-xs font-mono text-[#B5C1D4]">
-              {meta?.hasMore ? 'More teams available' : 'End of results'}
+              {meta ? `Showing ${teams.length} teams` : ''}
             </span>
 
             <button
               type="button"
               onClick={handleNextPage}
               disabled={!meta?.hasMore}
-              className="px-4 py-2 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] flex items-center gap-1.5 transition disabled:opacity-40 disabled:pointer-events-none"
+              className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition"
             >
               Next
               <ChevronRight className="w-4 h-4" />
@@ -226,24 +253,28 @@ export function TeamDiscovery() {
         </>
       )}
 
-      {/* Join Request Dialog */}
+      {/* Create Team Modal */}
+      {createModalOpen && (
+        <CreateTeamModal
+          isOpen={createModalOpen}
+          hackathonId={hackathonId}
+          onClose={() => setCreateModalOpen(false)}
+        />
+      )}
+
+      {/* Join Request Confirmation Dialog */}
       {joinModalTeam && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !createJoinRequestMutation.isPending) {
-              setJoinModalTeam(null);
-            }
-          }}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="w-full max-w-md p-6 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl text-[#E9EDF5]">
-            <h3 className="text-lg font-bold text-[#E9EDF5]">
-              Request to Join {joinModalTeam.name}
+          <div className="w-full max-w-md bg-[#171E31] border border-[#35405A] rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-[#E9EDF5] mb-2">
+              Apply to join {joinModalTeam.name}
             </h3>
-            <p className="text-xs text-[#B5C1D4] mt-1 leading-relaxed">
-              Attach an optional intro message for the leader. Note: submitting a request does not reserve a seat until approved.
+            <p className="text-xs text-[#B5C1D4] mb-4">
+              Send a note to the team leader explaining why you'd be a great fit for their squad.
             </p>
 
             <form onSubmit={handleConfirmJoin} className="mt-4 space-y-4">
@@ -284,9 +315,6 @@ export function TeamDiscovery() {
           </div>
         </div>
       )}
-
-      {/* Create Team Modal */}
-      <CreateTeamModal isOpen={createModalOpen} onClose={() => setCreateModalOpen(false)} />
     </AppShell>
   );
 }

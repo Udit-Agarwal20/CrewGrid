@@ -335,3 +335,4 @@ npx tsx scripts/inspect-query-plans.ts
 ## 15. License
 
 Developed for Hack4Hack Crew Hiring Challenge 2026 (Problem Statement 1). Distributed under the MIT License.
+

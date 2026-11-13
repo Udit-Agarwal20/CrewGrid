@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { JoinRequestResponse } from '@crewgrid/contracts';
 import { apiFetch, generateIdempotencyKey } from '../api/client';
+import { isValidObjectId } from '../utils/validation';
 
 export function useMyRequests() {
   return useQuery({
@@ -17,11 +18,11 @@ export function useTeamRequests(teamId: string | undefined) {
   return useQuery({
     queryKey: ['team-requests', teamId],
     queryFn: async () => {
-      if (!teamId) return [];
+      if (!isValidObjectId(teamId)) return [];
       const res = await apiFetch<JoinRequestResponse[]>(`/api/v1/teams/${teamId}/requests`);
       return res.data;
     },
-    enabled: !!teamId,
+    enabled: isValidObjectId(teamId),
     staleTime: 10000
   });
 }

@@ -13,15 +13,24 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useHackathon } from '../../context/HackathonContext';
 import { useMyTeam } from '../../hooks/useTeams';
+import { isValidObjectId } from '../../utils/validation';
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth();
   const { hackathons, activeHackathon, selectHackathon } = useHackathon();
-  const { data: myTeam } = useMyTeam(activeHackathon?.id);
+  const hasValidHackathon = isValidObjectId(activeHackathon?.id);
+  const { data: myTeam } = useMyTeam(hasValidHackathon ? activeHackathon?.id : undefined);
 
-  const hackathonId = activeHackathon?.id || 'default';
+  interface NavItem {
+    to: string;
+    label: string;
+    icon: React.ReactNode;
+    end?: boolean;
+    badge?: string;
+    disabled?: boolean;
+  }
 
-  const navLinks = [
+  const navLinks: NavItem[] = [
     {
       to: '/app',
       label: 'Dashboard',
@@ -29,19 +38,22 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       end: true
     },
     {
-      to: `/app/events/${hackathonId}/teams`,
+      to: hasValidHackathon ? `/app/events/${activeHackathon.id}/teams` : '#',
       label: 'Discover Teams',
-      icon: <Users className="w-4 h-4" />
+      icon: <Users className="w-4 h-4" />,
+      disabled: !hasValidHackathon
     },
     {
-      to: `/app/events/${hackathonId}/teammates`,
+      to: hasValidHackathon ? `/app/events/${activeHackathon.id}/teammates` : '#',
       label: 'Find Teammates',
-      icon: <UserPlus className="w-4 h-4" />
+      icon: <UserPlus className="w-4 h-4" />,
+      disabled: !hasValidHackathon
     },
     {
-      to: `/app/events/${hackathonId}/my-requests`,
+      to: hasValidHackathon ? `/app/events/${activeHackathon.id}/my-requests` : '#',
       label: 'My Requests',
-      icon: <Send className="w-4 h-4" />
+      icon: <Send className="w-4 h-4" />,
+      disabled: !hasValidHackathon
     },
     ...(myTeam
       ? [
@@ -90,13 +102,18 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             id="hackathon-select"
             value={activeHackathon?.id || ''}
             onChange={(e) => selectHackathon(e.target.value)}
-            className="w-full pl-3 pr-8 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] appearance-none focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+            disabled={hackathons.length === 0}
+            className="w-full pl-3 pr-8 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] appearance-none focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {hackathons.map((h) => (
-              <option key={h.id} value={h.id} className="bg-[#171E31] text-[#E9EDF5]">
-                {h.title}
-              </option>
-            ))}
+            {hackathons.length === 0 ? (
+              <option value="">No active hackathons</option>
+            ) : (
+              hackathons.map((h) => (
+                <option key={h.id} value={h.id} className="bg-[#171E31] text-[#E9EDF5]">
+                  {h.title}
+                </option>
+              ))
+            )}
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-[#B5C1D4] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
@@ -104,31 +121,49 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Navigation Links */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-        {navLinks.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition ${
-                isActive
-                  ? 'bg-[#9BF5CC]/15 text-[#9BF5CC] border border-[#9BF5CC]/30 font-semibold'
-                  : 'text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42]/60'
-              }`
-            }
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              {item.icon}
-              <span className="truncate">{item.label}</span>
-            </div>
-            {item.badge && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-bold bg-[#9BF5CC]/20 text-[#9BF5CC]">
-                {item.badge}
-              </span>
-            )}
-          </NavLink>
-        ))}
+        {navLinks.map((item) => {
+          if (item.disabled) {
+            return (
+              <div
+                key={item.label}
+                aria-disabled="true"
+                title="Select a valid hackathon to enable"
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-[#B5C1D4]/40 cursor-not-allowed select-none"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-[#9BF5CC]/15 text-[#9BF5CC] border border-[#9BF5CC]/30 font-semibold'
+                    : 'text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42]/60'
+                }`
+              }
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {item.icon}
+                <span className="truncate">{item.label}</span>
+              </div>
+              {item.badge && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-bold bg-[#9BF5CC]/20 text-[#9BF5CC]">
+                  {item.badge}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* User Footer */}
@@ -154,4 +189,3 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     </aside>
   );
 }
-

@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { Inbox, ArrowLeft, Compass } from 'lucide-react';
+import { Inbox, ArrowLeft, Compass, Loader2 } from 'lucide-react';
 import { useMyRequests, useCancelJoinRequest } from '../hooks/useRequests';
 import { useToast } from '../context/ToastContext';
 import { AppShell } from '../components/common/AppShell';
@@ -7,6 +7,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { SentRequestRow } from '../components/requests/SentRequestRow';
 import { SkeletonCard } from '../components/common/SkeletonCard';
 import { ErrorPanel } from '../components/common/ErrorPanel';
+import { isValidObjectId } from '../utils/validation';
 
 export function MyRequests() {
   const { id: hackathonId } = useParams<{ id: string }>();
@@ -26,6 +27,30 @@ export function MyRequests() {
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
   const pastRequests = requests.filter((r) => r.status !== 'pending');
+
+  if (hackathonId === 'default') {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#9BF5CC]" />
+          <p className="text-sm font-medium text-[#B5C1D4]">Redirecting to active hackathon...</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (hackathonId && !isValidObjectId(hackathonId)) {
+    return (
+      <AppShell>
+        <div className="max-w-xl mx-auto py-12">
+          <ErrorPanel
+            title="Invalid Event Identifier"
+            message="The requested hackathon ID is invalid or malformed. Please select an active event from the navigation menu."
+          />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell hackathonId={hackathonId}>
@@ -48,15 +73,13 @@ export function MyRequests() {
           subtitle="Review and manage applications you have sent to teams. When an application is approved, any other pending requests are automatically invalidated."
         />
 
-        {error && (
+        {error ? (
           <ErrorPanel
             title="Failed to Load Requests"
             message={(error as Error).message}
             onRetry={() => refetch()}
           />
-        )}
-
-        {isLoading ? (
+        ) : isLoading ? (
           <div className="space-y-3">
             <SkeletonCard className="h-24" />
             <SkeletonCard className="h-24" />
@@ -101,13 +124,13 @@ export function MyRequests() {
               </div>
             )}
 
-            {/* Resolved / Past Section */}
+            {/* Resolved / Historical Section */}
             {pastRequests.length > 0 && (
               <div className="space-y-3 pt-4 border-t border-[#35405A]">
                 <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-[#B5C1D4]">
-                  Resolved Requests ({pastRequests.length})
+                  Request History ({pastRequests.length})
                 </h2>
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 opacity-80">
                   {pastRequests.map((req) => (
                     <SentRequestRow key={req.id} request={req} onCancel={handleCancel} />
                   ))}

@@ -7,6 +7,7 @@ import {
   AuditEventResponse
 } from '@crewgrid/contracts';
 import { apiFetch, generateIdempotencyKey } from '../api/client';
+import { isValidObjectId } from '../utils/validation';
 
 export interface TeamBoardFilters {
   search?: string;
@@ -29,10 +30,10 @@ export function useTeamBoard(hackathonId: string | undefined, filters: TeamBoard
   return useQuery({
     queryKey,
     queryFn: async () => {
-      if (!hackathonId) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
+      if (!isValidObjectId(hackathonId)) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
       return apiFetch<TeamResponse[]>(`/api/v1/hackathons/${hackathonId}/teams?${params.toString()}`);
     },
-    enabled: !!hackathonId,
+    enabled: isValidObjectId(hackathonId),
     staleTime: 10000
   });
 }
@@ -41,11 +42,11 @@ export function useMyTeam(hackathonId: string | undefined) {
   return useQuery({
     queryKey: ['my-team', hackathonId],
     queryFn: async () => {
-      if (!hackathonId) return null;
+      if (!isValidObjectId(hackathonId)) return null;
       const res = await apiFetch<TeamResponse | null>(`/api/v1/hackathons/${hackathonId}/teams/my-team`);
       return res.data;
     },
-    enabled: !!hackathonId,
+    enabled: isValidObjectId(hackathonId),
     staleTime: 15000
   });
 }
@@ -54,11 +55,11 @@ export function useTeamDetails(teamId: string | undefined) {
   return useQuery({
     queryKey: ['team', teamId],
     queryFn: async () => {
-      if (!teamId) return null;
+      if (!isValidObjectId(teamId)) return null;
       const res = await apiFetch<TeamResponse>(`/api/v1/teams/${teamId}`);
       return res.data;
     },
-    enabled: !!teamId,
+    enabled: isValidObjectId(teamId),
     staleTime: 15000
   });
 }
@@ -67,11 +68,11 @@ export function useTeamMembers(teamId: string | undefined) {
   return useQuery({
     queryKey: ['team-members', teamId],
     queryFn: async () => {
-      if (!teamId) return [];
+      if (!isValidObjectId(teamId)) return [];
       const res = await apiFetch<TeamMember[]>(`/api/v1/teams/${teamId}/members`);
       return res.data;
     },
-    enabled: !!teamId,
+    enabled: isValidObjectId(teamId),
     staleTime: 15000
   });
 }
@@ -80,11 +81,11 @@ export function useTeamAudit(teamId: string | undefined, cursor?: string) {
   return useQuery({
     queryKey: ['team-audit', teamId, cursor],
     queryFn: async () => {
-      if (!teamId) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
+      if (!isValidObjectId(teamId)) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
       const url = cursor ? `/api/v1/teams/${teamId}/audit?cursor=${cursor}` : `/api/v1/teams/${teamId}/audit`;
       return apiFetch<AuditEventResponse[]>(url);
     },
-    enabled: !!teamId,
+    enabled: isValidObjectId(teamId),
     staleTime: 10000
   });
 }

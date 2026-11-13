@@ -26,3 +26,4 @@
 1. **Pacing:** Speak at a steady, measured pace (~130–140 words per minute).
 2. **Clarity on Numbers:** Emphasize specific numbers: *"50 simultaneous users, exactly 1 succeeds, 49 rejected, 0 5xx errors, p95 88.83 milliseconds"*.
 3. **Honest Environment Disclosure:** Deliver the free-tier disclosure smoothly as a professional engineering decision, not an apology.
+

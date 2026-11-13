@@ -78,3 +78,4 @@ Before recording the 5-minute video presentation, complete every item below to g
 - [ ] Audio is synchronized with screen actions; voice is clear and intelligible throughout.
 - [ ] No personal emails, unhashed tokens, or sensitive API keys visible in any frame.
 - [ ] Upload video to accessible, unlisted YouTube or Google Drive link (verify link opens in an incognito window without login requirements).
+

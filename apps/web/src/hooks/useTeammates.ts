@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { PublicUser, Suggestion } from '@crewgrid/contracts';
 import { apiFetch } from '../api/client';
+import { isValidObjectId } from '../utils/validation';
 
 export interface TeammateFilters {
   skill?: string;
@@ -19,10 +20,10 @@ export function useTeammates(hackathonId: string | undefined, filters: TeammateF
   return useQuery({
     queryKey: ['teammates', hackathonId, filters.skill, filters.timezone, filters.cursor],
     queryFn: async () => {
-      if (!hackathonId) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
+      if (!isValidObjectId(hackathonId)) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
       return apiFetch<PublicUser[]>(`/api/v1/hackathons/${hackathonId}/teammates?${params.toString()}`);
     },
-    enabled: !!hackathonId,
+    enabled: isValidObjectId(hackathonId),
     staleTime: 15000
   });
 }
@@ -31,12 +32,11 @@ export function useTeamSuggestions(teamId: string | undefined) {
   return useQuery({
     queryKey: ['team-suggestions', teamId],
     queryFn: async () => {
-      if (!teamId) return [];
+      if (!isValidObjectId(teamId)) return [];
       const res = await apiFetch<Suggestion[]>(`/api/v1/teams/${teamId}/suggestions`);
       return res.data;
     },
-    enabled: !!teamId,
+    enabled: isValidObjectId(teamId),
     staleTime: 15000
   });
 }
-

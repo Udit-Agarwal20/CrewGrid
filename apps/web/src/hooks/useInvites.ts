@@ -1,16 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { InviteResponse, TeamResponse } from '@crewgrid/contracts';
 import { apiFetch, generateIdempotencyKey } from '../api/client';
+import { isValidObjectId } from '../utils/validation';
 
 export function useTeamInvites(teamId: string | undefined) {
   return useQuery({
     queryKey: ['team-invites', teamId],
     queryFn: async () => {
-      if (!teamId) return [];
+      if (!isValidObjectId(teamId)) return [];
       const res = await apiFetch<InviteResponse[]>(`/api/v1/teams/${teamId}/invites`);
       return res.data;
     },
-    enabled: !!teamId,
+    enabled: isValidObjectId(teamId),
     staleTime: 10000
   });
 }

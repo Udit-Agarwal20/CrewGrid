@@ -163,3 +163,4 @@ kill $API_PID
 1. **Compound Indexing Eliminates In-Memory Sorts:** Suffixing `{ updatedAt: -1, _id: -1 }` to compound index keys reduced query execution time from scanning 145 keys to 12 keys, preventing V8 memory pressure.
 2. **Keyset Pagination vs Offset:** Using cursor dates and ObjectIds ensures consistent sub-100ms response times at any pagination depth, avoiding the $O(N)$ scanning penalty of `skip(N)`.
 3. **Transaction Write Latency vs Safety:** While reads achieve p95 < 90 ms, high write contention under 50 simultaneous writers incurs write-lock serialization (~3.5–4.0s for the entire 50-way race to resolve). This is an intentional engineering trade-off: **correctness and zero overbooking take precedence over speculative write latency**.
+
