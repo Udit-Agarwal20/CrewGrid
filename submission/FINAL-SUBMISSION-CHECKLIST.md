@@ -2,8 +2,8 @@
 
 **Competition:** Hack4Hack Crew Hiring Challenge 2026 — Problem Statement 1  
 **Submission Deadline:** Sunday, November 15, 2026 at 23:59 IST  
-**Verified Git Commit:** `0253267` (and latest M6 documentation commits)  
-**Hosted CI Run:** [GitHub Actions Run #42967189517](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42967189517) — 100% SUCCESS  
+**Verified Git Commit:** `e9e377d` (and subsequent technical evidence refinements)  
+**Hosted CI Run:** [GitHub Actions Run #43369567196](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43369567196) — 100% SUCCESS  
 **Live Deployed Application:** [https://crewgrid-api.onrender.com](https://crewgrid-api.onrender.com)  
 
 ---
@@ -53,5 +53,5 @@
 | **One-Page Design Document** | Attached `docs/FINAL-DESIGN-ONE-PAGER.pdf` |
 | **Load Test Report** | `https://github.com/Udit-Agarwal20/CrewGrid/blob/main/docs/LOAD-TEST-REPORT.md` |
 | **Demonstration Video URL** | *(Insert YouTube/Drive link after recording using `submission/VIDEO-SCRIPT.md`)* |
-| **Verified Git Commit Hash** | `0253267` (or latest M6 commit) |
-| **CI Verification Proof** | `https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42967189517` |
+| **Verified Git Commit Hash** | `e9e377d` (and subsequent technical evidence refinements) |
+| **CI Verification Proof** | `https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43369567196` |

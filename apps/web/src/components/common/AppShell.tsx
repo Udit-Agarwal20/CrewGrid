@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router';
 import { Menu, X } from 'lucide-react';
 import { SidebarNav } from './SidebarNav';
 import { LiveConnectionStatus } from './LiveConnectionStatus';
@@ -92,8 +93,21 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
           {children}
         </main>
 
-        <footer className="py-6 px-8 border-t border-[#35405A] text-center text-xs text-[#B5C1D4]">
+        <footer className="py-6 px-8 border-t border-[#35405A] text-xs text-[#B5C1D4] flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>CrewGrid · Hack4Hack Crew Hiring Challenge 2026 (PS1)</p>
+          <div className="flex items-center gap-4 text-[11px]">
+            <Link to="/engineering" className="hover:text-[#9BF5CC] transition underline underline-offset-2">
+              Technical Evidence
+            </Link>
+            <a
+              href="https://github.com/Udit-Agarwal20/CrewGrid"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-[#9BF5CC] transition"
+            >
+              GitHub
+            </a>
+          </div>
         </footer>
       </div>
     </div>

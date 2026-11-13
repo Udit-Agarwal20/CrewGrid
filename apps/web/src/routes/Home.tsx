@@ -49,12 +49,6 @@ export function Home() {
               </Link>
             </>
           )}
-          <Link
-            to="/engineering"
-            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#222A42]/60 hover:bg-[#222A42] border border-[#35405A] text-[#B5C1D4] hover:text-[#E9EDF5] font-mono text-xs flex items-center justify-center gap-2 transition"
-          >
-            Engineering Evidence
-          </Link>
         </div>
       </section>
 
@@ -112,10 +106,10 @@ export function Home() {
               Automated CI Verification
             </span>
             <h3 className="text-xl font-bold text-[#E9EDF5] mt-1">
-              80 Integration Tests Passing with 0 Invariant Violations
+              104 Integration Tests + 16 E2E Flows Passing (0 Violations)
             </h3>
             <p className="text-xs text-[#B5C1D4] mt-1.5 max-w-lg">
-              Verified against MongoDB 8.0 replica set with Supertest and Vitest across all 10 race scenarios.
+              Verified against MongoDB 8.0 replica set with Vitest, Supertest, and Playwright across all race scenarios.
             </p>
           </div>
           <Link
@@ -123,10 +117,40 @@ export function Home() {
             className="px-5 py-2.5 rounded-xl bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] flex items-center gap-2 transition shrink-0"
           >
             <CheckCircle2 className="w-4 h-4 text-[#9BF5CC]" />
-            Inspect Evidence
+            Technical Evidence
           </Link>
         </div>
       </section>
+
+      {/* Landing Page Footer with Discreet Technical Evidence Link */}
+      <footer className="border-t border-[#35405A] py-8 px-4 mt-auto">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#B5C1D4]">
+          <div>
+            CrewGrid © 2026 · Problem Statement 1 (Race-Proof Team Formation)
+          </div>
+          <div className="flex items-center gap-6">
+            <Link to="/engineering" className="hover:text-[#9BF5CC] transition underline underline-offset-2">
+              Technical Evidence
+            </Link>
+            <a
+              href="https://github.com/Udit-Agarwal20/CrewGrid"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-[#9BF5CC] transition"
+            >
+              GitHub Repository
+            </a>
+            <a
+              href="https://crewgrid-api.onrender.com/health"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-[#9BF5CC] transition"
+            >
+              API Health
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

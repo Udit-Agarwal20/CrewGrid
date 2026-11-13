@@ -8,6 +8,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.0-61dafb?logo=react)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-8.0%20Replica%20Set-47a248?logo=mongodb)](https://www.mongodb.com/)
+[![Technical Evidence](https://img.shields.io/badge/Technical%20Evidence-Dossier-9BF5CC)](https://crewgrid-api.onrender.com/engineering)
 
 ---
 
@@ -314,12 +315,15 @@ npx tsx scripts/inspect-query-plans.ts
 ## 13. Hosted Deployment & Submission Links
 
 - **Live Web Application:** [https://crewgrid-api.onrender.com](https://crewgrid-api.onrender.com) *(Single-origin serving of React SPA and API backend)*
+- **Technical Evidence Dossier:** [https://crewgrid-api.onrender.com/engineering](https://crewgrid-api.onrender.com/engineering) *(Public, unauthenticated technical review portal)*
 - **API Health Check:** [https://crewgrid-api.onrender.com/health](https://crewgrid-api.onrender.com/health)
 - **API Readiness Check:** [https://crewgrid-api.onrender.com/ready](https://crewgrid-api.onrender.com/ready)
 - **GitHub Repository:** [https://github.com/Udit-Agarwal20/CrewGrid](https://github.com/Udit-Agarwal20/CrewGrid)
-- **Verified GitHub Actions CI Run:** [Run #42869098437](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/42869098437) (100% Green across 104 API tests, 8 web tests, and 10 Playwright tests)
+- **Verified GitHub Actions CI Run:** [Run #43369567196](https://github.com/Udit-Agarwal20/CrewGrid/actions/runs/43369567196) (100% Green across 104 API integration tests, 14 web unit tests, and 16 Playwright E2E tests)
+- **Concurrency Race Proof Evidence:** [`evidence/concurrency-evidence.md`](file:///Users/uditagarwal/Desktop/CrewGrid/evidence/concurrency-evidence.md)
+- **Database Invariant Check Evidence:** [`scripts/invariants/verify.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/scripts/invariants/verify.ts)
 - **Load Test Report:** [`docs/LOAD-TEST-REPORT.md`](file:///Users/uditagarwal/Desktop/CrewGrid/docs/LOAD-TEST-REPORT.md)
-- **One-Page Design Document:** [`docs/FINAL-DESIGN-ONE-PAGER.md`](file:///Users/uditagarwal/Desktop/CrewGrid/docs/FINAL-DESIGN-ONE-PAGER.md)
+- **One-Page Design Document:** [`docs/FINAL-DESIGN-ONE-PAGER.pdf`](file:///Users/uditagarwal/Desktop/CrewGrid/docs/FINAL-DESIGN-ONE-PAGER.pdf)
 
 ---
 

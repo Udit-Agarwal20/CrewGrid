@@ -4,7 +4,6 @@ import {
   Users,
   UserPlus,
   Send,
-  Shield,
   User,
   LogOut,
   Sparkles,
@@ -69,11 +68,6 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       to: '/app/profile',
       label: 'Profile & Settings',
       icon: <User className="w-4 h-4" />
-    },
-    {
-      to: '/engineering',
-      label: 'Engineering Evidence',
-      icon: <Shield className="w-4 h-4" />
     }
   ];
 
