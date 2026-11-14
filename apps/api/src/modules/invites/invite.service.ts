@@ -4,6 +4,7 @@ import { inviteRepo, InviteDocument } from './invite.repo.js';
 import { teamRepo } from '../teams/team.repo.js';
 import { membershipService } from '../membership/membership.service.js';
 import { auditService } from '../audit/audit.service.js';
+import { connectionManager } from '../../realtime/connection.manager.js';
 import { env } from '../../config/env.js';
 import { AppError, InviteResponse, InviteStatus, TeamResponse } from '@crewgrid/contracts';
 
@@ -173,6 +174,9 @@ export class InviteService {
         return membershipService.toTeamResponse(team, applicantId);
       }
     });
+
+    // Promote client SSE connection to new team authorization after transaction commit
+    connectionManager.updateClientTeam(applicantId, invite.hackathonId, invite.teamId);
 
     return { team: updatedTeam, replayed };
   }

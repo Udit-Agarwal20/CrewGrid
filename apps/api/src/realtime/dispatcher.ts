@@ -60,10 +60,10 @@ export class OutboxDispatcher {
         fullDocument: 'updateLookup'
       });
 
-      this.changeStream.on('change', (change: any) => {
+      this.changeStream.on('change', async (change: any) => {
         if (change.operationType === 'insert' && change.fullDocument) {
           const doc = change.fullDocument as OutboxEventDocument;
-          this.handleEvent(doc);
+          await this.handleEvent(doc);
         }
       });
 
@@ -75,12 +75,12 @@ export class OutboxDispatcher {
     }
   }
 
-  private handleEvent(event: OutboxEventDocument): void {
+  private async handleEvent(event: OutboxEventDocument): Promise<void> {
     if (this.lastDispatchedId && event._id <= this.lastDispatchedId) {
       return; // Already processed
     }
     this.lastDispatchedId = event._id;
-    connectionManager.broadcastEvent(event);
+    await connectionManager.broadcastEvent(event);
   }
 
   async pollAndDispatch(): Promise<number> {
@@ -97,7 +97,7 @@ export class OutboxDispatcher {
         .toArray();
 
       for (const event of events) {
-        this.handleEvent(event);
+        await this.handleEvent(event);
       }
 
       return events.length;

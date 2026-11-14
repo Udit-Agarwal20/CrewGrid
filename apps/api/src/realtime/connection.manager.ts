@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { ObjectId } from 'mongodb';
 import crypto from 'node:crypto';
 import { OutboxEventDocument } from './outbox.repo.js';
+import { membershipRepo } from '../modules/membership/membership.repo.js';
 import { logger } from '../observability/logger.js';
 
 export interface SseClientConnection {
@@ -65,12 +66,26 @@ export class ConnectionManager {
     }
   }
 
-  updateClientTeam(userId: ObjectId, hackathonId: ObjectId, newTeamId: ObjectId | null): void {
+  updateClientTeam(userId: ObjectId, hackathonId: ObjectId | undefined, newTeamId: ObjectId | null): void {
     for (const conn of this.connections.values()) {
-      if (conn.userId.equals(userId) && conn.hackathonId.equals(hackathonId)) {
-        conn.teamId = newTeamId;
+      if (conn.userId.equals(userId)) {
+        if (!hackathonId || conn.hackathonId.equals(hackathonId)) {
+          conn.teamId = newTeamId;
+        }
       }
     }
+    logger.debug(
+      {
+        userId: userId.toHexString(),
+        hackathonId: hackathonId ? hackathonId.toHexString() : 'all',
+        newTeamId: newTeamId ? newTeamId.toHexString() : null
+      },
+      'Updated client team authorization'
+    );
+  }
+
+  revokeTeamAuthorization(userId: ObjectId, hackathonId?: ObjectId): void {
+    this.updateClientTeam(userId, hackathonId, null);
   }
 
   getActiveConnectionsCount(): number {
@@ -102,9 +117,25 @@ export class ConnectionManager {
     return `id: ${event._id.toHexString()}\nevent: ${event.eventType}\ndata: ${data}\n\n`;
   }
 
-  broadcastEvent(event: OutboxEventDocument): void {
+  async broadcastEvent(event: OutboxEventDocument): Promise<void> {
     const message = this.formatSseMessage(event);
     const deadConnections: string[] = [];
+
+    // Authoritative check for team-scoped events: query committed database memberships
+    let activeMemberUserIds: Set<string> | null = null;
+    if (event.scope === 'team' && event.teamId) {
+      try {
+        const members = await membershipRepo.findTeamMembers(event.teamId);
+        activeMemberUserIds = new Set(members.map((m) => m.userId.toHexString()));
+      } catch (err: any) {
+        logger.error(
+          { err: err.message, teamId: event.teamId.toHexString() },
+          'Error querying team members for SSE broadcast authorization'
+        );
+        // Fail-safe: empty set prevents unauthorized data leakage
+        activeMemberUserIds = new Set();
+      }
+    }
 
     for (const conn of this.connections.values()) {
       if (!conn.hackathonId.equals(event.hackathonId)) {
@@ -116,9 +147,21 @@ export class ConnectionManager {
         // Public event: delivered to all subscribers of this hackathon
         this.writeToConnection(conn, message, deadConnections);
       } else if (event.scope === 'team') {
-        // Team event: delivered only if client belongs to that team
-        if (event.teamId && conn.teamId && conn.teamId.equals(event.teamId)) {
-          this.writeToConnection(conn, message, deadConnections);
+        // Team event: authoritatively verify against active database membership
+        if (event.teamId && activeMemberUserIds) {
+          const isMember = activeMemberUserIds.has(conn.userId.toHexString());
+          if (isMember) {
+            // Self-heal / update cached teamId if outdated
+            if (!conn.teamId || !conn.teamId.equals(event.teamId)) {
+              conn.teamId = event.teamId;
+            }
+            this.writeToConnection(conn, message, deadConnections);
+          } else {
+            // Stale cache defense: if connection was previously cached for this team, revoke it
+            if (conn.teamId && conn.teamId.equals(event.teamId)) {
+              conn.teamId = null;
+            }
+          }
         }
       } else if (event.scope === 'user') {
         // User event: delivered only to targeted user

@@ -6,6 +6,7 @@ import { requestRepo } from '../requests/request.repo.js';
 import { inviteRepo } from '../invites/invite.repo.js';
 import { auditService } from '../audit/audit.service.js';
 import { outboxRepo } from '../../realtime/outbox.repo.js';
+import { connectionManager } from '../../realtime/connection.manager.js';
 import { idempotencyService, computeRequestHash } from '../idempotency/idempotency.service.js';
 import { withDomainTransaction } from '../../db/transaction.js';
 import { AppError, TeamResponse } from '@crewgrid/contracts';
@@ -228,6 +229,9 @@ export class MembershipService {
         return this.toTeamResponse(teamDoc, actorId);
       }
     });
+
+    // Revoke stale status and promote connection to new team authorization after transaction commit
+    connectionManager.updateClientTeam(actorId, hackathonId, new ObjectId(createdTeam.id));
 
     return { team: createdTeam, replayed };
   }
@@ -532,6 +536,12 @@ export class MembershipService {
       }
     });
 
+    // Revoke connection team authorization after transaction commit
+    const teamDoc = await teamRepo.findById(teamId);
+    if (teamDoc) {
+      connectionManager.updateClientTeam(actorId, teamDoc.hackathonId, null);
+    }
+
     return { result, replayed };
   }
 
@@ -606,6 +616,12 @@ export class MembershipService {
         return true;
       }
     });
+
+    // Revoke connection team authorization after transaction commit
+    const teamDoc = await teamRepo.findById(teamId);
+    if (teamDoc) {
+      connectionManager.updateClientTeam(targetUserId, teamDoc.hackathonId, null);
+    }
 
     return { success, replayed };
   }
