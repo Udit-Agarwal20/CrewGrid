@@ -256,4 +256,87 @@ describe('useEvents Named-Event Handling Tests (Issue 2)', () => {
     expect(MockEventSource.instances.length).toBe(1);
     expect(result.current.status).toBe('disconnected');
   });
+
+  it('handles "sync.gap" event and invalidates all query caches', async () => {
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const hackathonId = '650c00000000000000000088';
+
+    const { result } = renderHook(() => useEvents(hackathonId), {
+      wrapper: createWrapper()
+    });
+
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe('connected');
+    });
+
+    const es = MockEventSource.instances[0];
+
+    // Server sends sync.gap due to replay overflow or TTL eviction
+    act(() => {
+      const gapEvent = new MessageEvent('sync.gap', {
+        data: JSON.stringify({ gap: true, reason: 'overflow' }),
+        lastEventId: '650c00000000000000000077'
+      });
+      es.dispatchEvent(gapEvent);
+    });
+
+    expect(result.current.lastActivity).not.toBeNull();
+    // Authoritative full re-sync: queryClient.invalidateQueries() called with no filter
+    expect(invalidateSpy).toHaveBeenCalledWith();
+  });
+
+  it('tracks lastEventId and appends ?lastEventId=... on reconnection', async () => {
+    // Mock fetch for reconnect probe returning 200 (retryable)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      status: 200,
+      ok: true
+    } as any);
+
+    const hackathonId = '650c00000000000000000077';
+    const { result } = renderHook(() => useEvents(hackathonId), {
+      wrapper: createWrapper()
+    });
+
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe('connected');
+    });
+
+    const es1 = MockEventSource.instances[0];
+
+    // Client receives an event with eventId
+    act(() => {
+      const event = new MessageEvent('team.created', {
+        data: JSON.stringify({
+          eventId: '650c00000000000000000055',
+          eventType: 'team.created',
+          hackathonId,
+          teamId: null,
+          userId: null,
+          scope: 'public-hackathon',
+          occurredAt: new Date().toISOString(),
+          payload: {}
+        }),
+        lastEventId: '650c00000000000000000055'
+      });
+      es1.dispatchEvent(event);
+    });
+
+    // Simulate network drop
+    act(() => {
+      if (es1.onerror) {
+        es1.onerror(new Event('error'));
+      }
+    });
+
+    // Wait for reconnection
+    await vi.waitFor(
+      () => {
+        expect(MockEventSource.instances.length).toBe(2);
+      },
+      { timeout: 5000 }
+    );
+
+    const es2 = MockEventSource.instances[1];
+    expect(es2.url).toContain('/api/v1/hackathons/650c00000000000000000077/events?lastEventId=650c00000000000000000055');
+  });
 });

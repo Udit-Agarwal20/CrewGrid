@@ -25,6 +25,7 @@ export function useEvents(hackathonId: string | undefined) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
   const reconnectAttemptsRef = useRef<number>(0);
+  const lastEventIdRef = useRef<string | null>(null);
 
   const invalidateQueriesForEvent = useCallback(
     (event: RealtimeEventEnvelope) => {
@@ -62,13 +63,29 @@ export function useEvents(hackathonId: string | undefined) {
 
     const handleEvent = (messageEvent: MessageEvent) => {
       if (isCancelled) return;
+      if (messageEvent.lastEventId) {
+        lastEventIdRef.current = messageEvent.lastEventId;
+      }
       try {
         const envelope: RealtimeEventEnvelope = JSON.parse(messageEvent.data);
+        if (envelope.eventId) {
+          lastEventIdRef.current = envelope.eventId;
+        }
         setLastActivity(new Date());
         invalidateQueriesForEvent(envelope);
       } catch {
         // Ignore heartbeat comments or non-json keep-alive
       }
+    };
+
+    const handleSyncGap = (messageEvent: MessageEvent) => {
+      if (isCancelled) return;
+      if (messageEvent.lastEventId) {
+        lastEventIdRef.current = messageEvent.lastEventId;
+      }
+      setLastActivity(new Date());
+      // Re-sync all query cache to authoritative backend state on gap detection
+      queryClient.invalidateQueries();
     };
 
     function cleanupListeners(es: EventSource) {
@@ -78,6 +95,7 @@ export function useEvents(hackathonId: string | undefined) {
       for (const eventName of SUPPORTED_SSE_EVENTS) {
         es.removeEventListener(eventName, handleEvent as EventListener);
       }
+      es.removeEventListener('sync.gap', handleSyncGap as EventListener);
     }
 
     function connect() {
@@ -88,7 +106,10 @@ export function useEvents(hackathonId: string | undefined) {
 
       setStatus('connecting');
 
-      const url = `/api/v1/hackathons/${hackathonId}/events`;
+      let url = `/api/v1/hackathons/${hackathonId}/events`;
+      if (lastEventIdRef.current) {
+        url += `?lastEventId=${encodeURIComponent(lastEventIdRef.current)}`;
+      }
       const es = new EventSource(url, { withCredentials: true });
       currentEs = es;
       eventSourceRef.current = es;
@@ -108,6 +129,7 @@ export function useEvents(hackathonId: string | undefined) {
       for (const eventName of SUPPORTED_SSE_EVENTS) {
         es.addEventListener(eventName, handleEvent as EventListener);
       }
+      es.addEventListener('sync.gap', handleSyncGap as EventListener);
 
       es.onerror = async () => {
         if (isCancelled) return;

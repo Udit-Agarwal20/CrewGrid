@@ -13,6 +13,8 @@ export interface SseClientConnection {
   res: Response;
   tokenHash?: string;
   connectedAt: Date;
+  buffering?: boolean;
+  buffer?: OutboxEventDocument[];
 }
 
 export class ConnectionManager {
@@ -39,7 +41,8 @@ export class ConnectionManager {
     hackathonId: ObjectId,
     teamId: ObjectId | null,
     res: Response,
-    tokenHash?: string
+    tokenHash?: string,
+    options?: { buffering?: boolean }
   ): string {
     const connectionId = crypto.randomUUID();
     const conn: SseClientConnection = {
@@ -49,7 +52,9 @@ export class ConnectionManager {
       teamId,
       res,
       tokenHash,
-      connectedAt: new Date()
+      connectedAt: new Date(),
+      buffering: options?.buffering ?? false,
+      buffer: options?.buffering ? [] : undefined
     };
 
     this.connections.set(connectionId, conn);
@@ -59,6 +64,31 @@ export class ConnectionManager {
     );
 
     return connectionId;
+  }
+
+  flushBuffer(connectionId: string, highestReplayedId: ObjectId | null): void {
+    const conn = this.connections.get(connectionId);
+    if (!conn || !conn.buffering) return;
+
+    const bufferedEvents = conn.buffer || [];
+    conn.buffering = false;
+    conn.buffer = undefined;
+
+    const deadConnections: string[] = [];
+    // Sort buffered events by _id ascending
+    bufferedEvents.sort((a, b) => a._id.toHexString().localeCompare(b._id.toHexString()));
+
+    for (const event of bufferedEvents) {
+      if (highestReplayedId && event._id <= highestReplayedId) {
+        continue;
+      }
+      const message = this.formatSseMessage(event);
+      this.writeToConnection(conn, message, deadConnections);
+    }
+
+    for (const deadId of deadConnections) {
+      this.removeConnection(deadId);
+    }
   }
 
   removeConnection(connectionId: string): void {
@@ -182,9 +212,19 @@ export class ConnectionManager {
     return `id: ${event._id.toHexString()}\nevent: ${event.eventType}\ndata: ${data}\n\n`;
   }
 
-  async broadcastEvent(event: OutboxEventDocument): Promise<void> {
+  formatSyncGapMessage(_hackathonId: ObjectId, reason: 'overflow' | 'expired'): string {
+    const data = JSON.stringify({
+      gap: true,
+      reason
+    });
+    const gapId = new ObjectId().toHexString();
+    return `id: ${gapId}\nevent: sync.gap\ndata: ${data}\n\n`;
+  }
+
+  async broadcastEvent(event: OutboxEventDocument): Promise<{ authError?: boolean }> {
     const message = this.formatSseMessage(event);
     const deadConnections: string[] = [];
+    let authError = false;
 
     // Authoritative check for team-scoped events: query committed database memberships
     let activeMemberUserIds: Set<string> | null = null;
@@ -199,6 +239,7 @@ export class ConnectionManager {
         );
         // Fail-safe: empty set prevents unauthorized data leakage
         activeMemberUserIds = new Set();
+        authError = true;
       }
     }
 
@@ -210,7 +251,7 @@ export class ConnectionManager {
       // Check scope authorization
       if (event.scope === 'public-hackathon') {
         // Public event: delivered to all subscribers of this hackathon
-        this.writeToConnection(conn, message, deadConnections);
+        this.deliverToConnection(conn, event, message, deadConnections);
       } else if (event.scope === 'team') {
         // Team event: authoritatively verify against active database membership
         if (event.teamId && activeMemberUserIds) {
@@ -220,9 +261,9 @@ export class ConnectionManager {
           const isAuthorized = isLocallyAuthorized && isDbAuthorized;
 
           if (isAuthorized) {
-            this.writeToConnection(conn, message, deadConnections);
-          } else {
-            // Stale cache defense: if connection was previously cached for this team, revoke it
+            this.deliverToConnection(conn, event, message, deadConnections);
+          } else if (!authError) {
+            // Stale cache defense: only revoke if DB query succeeded and confirmed user is no longer a member
             if (conn.teamId && conn.teamId.equals(event.teamId)) {
               conn.teamId = null;
             }
@@ -231,7 +272,7 @@ export class ConnectionManager {
       } else if (event.scope === 'user') {
         // User event: delivered only to targeted user
         if (event.userId && conn.userId.equals(event.userId)) {
-          this.writeToConnection(conn, message, deadConnections);
+          this.deliverToConnection(conn, event, message, deadConnections);
         }
       }
     }
@@ -239,6 +280,24 @@ export class ConnectionManager {
     for (const deadId of deadConnections) {
       this.removeConnection(deadId);
     }
+
+    return { authError };
+  }
+
+  private deliverToConnection(
+    conn: SseClientConnection,
+    event: OutboxEventDocument,
+    message: string,
+    deadConnections: string[]
+  ): void {
+    if (conn.buffering) {
+      if (!conn.buffer) {
+        conn.buffer = [];
+      }
+      conn.buffer.push(event);
+      return;
+    }
+    this.writeToConnection(conn, message, deadConnections);
   }
 
   private writeToConnection(

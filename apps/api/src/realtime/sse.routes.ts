@@ -32,6 +32,11 @@ export function createSseRouter(): Router {
           throw new AppError(404, 'TEAM_NOT_FOUND', 'Hackathon not found or inactive');
         }
 
+        const tokenHash = req.sessionRecord?.tokenHash;
+        if (!tokenHash) {
+          throw new AppError(401, 'UNAUTHENTICATED', 'Valid session required for real-time stream');
+        }
+
         // Determine user's current team membership in this hackathon
         const membership = await membershipRepo.findActiveMembership(hackathonId, req.user!._id);
         const teamId = membership ? membership.teamId : null;
@@ -50,24 +55,47 @@ export function createSseRouter(): Router {
           (res as any).flush();
         }
 
-        // Replay missed events if Last-Event-ID header is provided
+        // Register client connection immediately in buffering mode to close replay-to-live registration gap
+        const connectionId = connectionManager.addConnection(
+          req.user!._id,
+          hackathonId,
+          teamId,
+          res,
+          tokenHash,
+          { buffering: true }
+        );
+
+        req.on('close', () => {
+          connectionManager.removeConnection(connectionId);
+        });
+
+        // Replay missed events if Last-Event-ID header or query param is provided
+        let highestReplayedId: ObjectId | null = null;
         const lastIdHeader = req.header('last-event-id') || (req.query['lastEventId'] as string | undefined);
         if (lastIdHeader && ObjectId.isValid(lastIdHeader)) {
           const lastEventId = new ObjectId(lastIdHeader);
-          const replayEvents = await outboxDispatcher.getReplayEvents(hackathonId, lastEventId, 50);
+          highestReplayedId = lastEventId;
 
-          for (const event of replayEvents) {
-            let authorized = false;
-            if (event.scope === 'public-hackathon') {
-              authorized = true;
-            } else if (event.scope === 'team' && teamId && event.teamId?.equals(teamId)) {
-              authorized = true;
-            } else if (event.scope === 'user' && event.userId?.equals(req.user!._id)) {
-              authorized = true;
-            }
+          const replayResult = await outboxDispatcher.getReplayEvents(hackathonId, lastEventId, 50);
 
-            if (authorized) {
-              res.write(connectionManager.formatSseMessage(event));
+          if (replayResult.gap) {
+            // Replay gap detected (TTL evicted or buffer overflow): signal sync.gap to client
+            res.write(connectionManager.formatSyncGapMessage(hackathonId, replayResult.reason ?? 'overflow'));
+          } else {
+            for (const event of replayResult) {
+              let authorized = false;
+              if (event.scope === 'public-hackathon') {
+                authorized = true;
+              } else if (event.scope === 'team' && teamId && event.teamId?.equals(teamId)) {
+                authorized = true;
+              } else if (event.scope === 'user' && event.userId?.equals(req.user!._id)) {
+                authorized = true;
+              }
+
+              if (authorized) {
+                res.write(connectionManager.formatSseMessage(event));
+              }
+              highestReplayedId = event._id;
             }
           }
 
@@ -76,16 +104,8 @@ export function createSseRouter(): Router {
           }
         }
 
-        // Register client connection for live stream
-        const tokenHash = req.sessionRecord?.tokenHash;
-        if (!tokenHash) {
-          throw new AppError(401, 'UNAUTHENTICATED', 'Valid session required for real-time stream');
-        }
-        const connectionId = connectionManager.addConnection(req.user!._id, hackathonId, teamId, res, tokenHash);
-
-        req.on('close', () => {
-          connectionManager.removeConnection(connectionId);
-        });
+        // Flush in-flight buffered broadcasts and transition connection to live broadcast
+        connectionManager.flushBuffer(connectionId, highestReplayedId);
       } catch (err) {
         next(err);
       }
@@ -94,4 +114,3 @@ export function createSseRouter(): Router {
 
   return router;
 }
-
