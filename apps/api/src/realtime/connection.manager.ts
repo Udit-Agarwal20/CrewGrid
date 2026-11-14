@@ -102,6 +102,10 @@ export class ConnectionManager {
     this.updateClientTeam(userId, hackathonId, null);
   }
 
+  /**
+   * Session-scoped SSE connection termination used during regular logout.
+   * Closes only connections opened under the specific session (e.g. tabs in that browser).
+   */
   closeConnectionsForSession(tokenHash: string): number {
     const toRemove: string[] = [];
     for (const [id, conn] of this.connections.entries()) {
@@ -123,6 +127,11 @@ export class ConnectionManager {
     return toRemove.length;
   }
 
+  /**
+   * Account-wide SSE connection termination preserved as an explicit, separate operation.
+   * Used for security events such as account suspension, full password reset, or admin revocation.
+   * Normal logout must NOT invoke this method, to preserve independent multi-device sessions.
+   */
   closeConnectionsForUser(userId: ObjectId): number {
     const toRemove: string[] = [];
     for (const [id, conn] of this.connections.entries()) {

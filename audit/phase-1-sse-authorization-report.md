@@ -5,7 +5,7 @@
 **Branch:** `fix/sse-live-authorization`  
 **Date:** November 14, 2026  
 **Auditor:** Senior Backend & Security Verification Engineer  
-**Status:** **RESOLVED & VERIFIED** (124/124 API tests passing, 14/14 Web tests, 16/16 E2E passing, 0 invariant violations)
+**Status:** **RESOLVED & VERIFIED** (126/126 API tests passing, 14/14 Web tests, 16/16 E2E passing, 0 invariant violations)
 
 ---
 
@@ -177,12 +177,13 @@ enqueueAndDispatch(event: OutboxEventDocument): Promise<void> {
 - Prevents unhandled promise rejections from crashing the process.
 - Synchronizes cross-instance `member.left` (with `expectedCurrentTeamId`) and `member.joined` mutations to local connections.
 
-### 4. Session-Scoped Logout SSE Revocation
-In [`connection.manager.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/realtime/connection.manager.ts) and [`auth.routes.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/modules/auth/auth.routes.ts):
-- Each SSE connection stores the active session's `tokenHash`.
+### 4. Session-Scoped Logout SSE Revocation (Zero Cross-Device Interference)
+In [`connection.manager.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/realtime/connection.manager.ts), [`auth.routes.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/modules/auth/auth.routes.ts), and [`sse.routes.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/realtime/sse.routes.ts):
+- Every authenticated SSE connection is required to carry the session's `tokenHash`. If `tokenHash` is missing or invalid, `createSseRouter` fails safely with HTTP 401 UNAUTHENTICATED.
 - On `POST /api/v1/auth/logout`, `connectionManager.closeConnectionsForSession(tokenHash)` terminates only the SSE connections associated with the logging-out device (e.g. all browser tabs on that machine).
-- Independent sessions on other devices (e.g. mobile app or secondary workstation) remain connected without disruption.
-- Reconnection attempts with the revoked session fail with HTTP 401 UNAUTHENTICATED. Global user revocation (`closeConnectionsForUser(userId)`) is retained for administrative account suspension or password resets.
+- **Removal of Unsafe Global Fallback:** The unsafe fallback (`if (closed === 0) closeConnectionsForUser(...)`) was completely removed. When a user logs out on Device A where no active SSE stream exists (e.g. mobile client or REST API caller), `closeConnectionsForSession` returns 0 and leaves Device B's active SSE connections 100% untouched and streaming.
+- **Preservation of Explicit Account-Wide Revocation:** `connectionManager.closeConnectionsForUser(userId)` is preserved as an explicit, separate operation for administrative suspensions, account deactivations, and password resets.
+- Reconnection attempts with the revoked session fail with HTTP 401 UNAUTHENTICATED, while independent sessions on other devices remain valid.
 
 ---
 
@@ -192,7 +193,7 @@ In [`connection.manager.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api
    - Added `membershipRepo` import.
    - Added `tokenHash?: string` to `SseClientConnection` and `addConnection`.
    - Enhanced `updateClientTeam(userId, hackathonId, newTeamId, expectedCurrentTeamId)` with expected-team protection.
-   - Added `closeConnectionsForSession(tokenHash)` for multi-device session isolation and `closeConnectionsForUser(userId)`.
+   - Added `closeConnectionsForSession(tokenHash)` for multi-device session isolation, preserving `closeConnectionsForUser(userId)` as an explicit administrative operation.
    - Transformed `broadcastEvent(event)` to `async`: queries `membershipRepo.findTeamMembers(event.teamId)` for team events and enforces dual-layer validation.
 
 2. [`apps/api/src/realtime/dispatcher.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/realtime/dispatcher.ts):
@@ -211,17 +212,17 @@ In [`connection.manager.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api
    - Added post-commit `updateClientTeam` call to `approveRequest`.
 
 6. [`apps/api/src/modules/auth/auth.routes.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/modules/auth/auth.routes.ts):
-   - Updated `POST /logout` to terminate only the current session's SSE connections via `closeConnectionsForSession(tokenHash)`, falling back to `closeConnectionsForUser` if untracked.
+   - Scoped `POST /logout` exclusively to the current session via `closeConnectionsForSession(tokenHash)`, removing the unsafe global-user fallback.
 
 7. [`apps/api/src/realtime/sse.routes.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/src/realtime/sse.routes.ts):
-   - Attached `req.sessionRecord?.tokenHash` to `connectionManager.addConnection`.
+   - Attached `req.sessionRecord?.tokenHash` to `connectionManager.addConnection`, failing safely with HTTP 401 UNAUTHENTICATED if missing.
 
 8. [`apps/api/test/realtime.sse.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/realtime.sse.test.ts):
    - Added `membershipRepo.insertMembership` fixtures to unit tests verifying team-scoped data isolation.
    - Awaited `broadcastEvent` calls.
 
 9. [`apps/api/test/sse.authorization.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/sse.authorization.test.ts):
-   - Dedicated regression test suite covering all 20 lifecycle, race, ordering, post-commit gap, multi-instance, and session isolation scenarios.
+   - Dedicated regression test suite covering all 22 lifecycle, race, ordering, post-commit gap, multi-instance, no-stream logout, and multi-device session isolation scenarios.
 
 ---
 
@@ -231,26 +232,28 @@ The test file [`apps/api/test/sse.authorization.test.ts`](file:///Users/uditagar
 
 | Test Scenario | Purpose | Result Before Fix | Result After Fix |
 | :--- | :--- | :--- | :--- |
-| **Scenario 1** | Active team member receives authorized team events | PASSED | **PASSED (183ms)** |
-| **Scenario 2** | Member leaves team voluntarily $\rightarrow$ must not receive subsequent team events | FAILED (Stale leak) | **PASSED (186ms)** |
-| **Scenario 3** | Leader removes member $\rightarrow$ must not receive subsequent team events | FAILED (Stale leak) | **PASSED (193ms)** |
+| **Scenario 1** | Active team member receives authorized team events | PASSED | **PASSED (217ms)** |
+| **Scenario 2** | Member leaves team voluntarily $\rightarrow$ must not receive subsequent team events | FAILED (Stale leak) | **PASSED (232ms)** |
+| **Scenario 3** | Leader removes member $\rightarrow$ must not receive subsequent team events | FAILED (Stale leak) | **PASSED (186ms)** |
 | **Scenario 4** | Unassigned user joins team $\rightarrow$ receives team events on open connection | FAILED (Undelivered) | **PASSED (183ms)** |
-| **Scenario 5** | User switches from Team A to Team B $\rightarrow$ receives B, never A | FAILED (Cross-team leak) | **PASSED (215ms)** |
-| **Scenario 6** | Event isolation across different teams and different hackathons | PASSED | **PASSED (105ms)** |
-| **Scenario 7** | Public-hackathon and user-scoped events remain authorized regardless of team state | PASSED | **PASSED (118ms)** |
-| **Scenario 8** | Concurrent membership changes vs outbox broadcast safety | FAILED (Post-leave leak) | **PASSED (193ms)** |
-| **Investigation 1** | TOCTOU barrier test: removal commits during in-flight lookup $\rightarrow$ event dropped | N/A (New test) | **PASSED (187ms)** |
+| **Scenario 5** | User switches from Team A to Team B $\rightarrow$ receives B, never A | FAILED (Cross-team leak) | **PASSED (204ms)** |
+| **Scenario 6** | Event isolation across different teams and different hackathons | PASSED | **PASSED (104ms)** |
+| **Scenario 7** | Public-hackathon and user-scoped events remain authorized regardless of team state | PASSED | **PASSED (112ms)** |
+| **Scenario 8** | Concurrent membership changes vs outbox broadcast safety | FAILED (Post-leave leak) | **PASSED (178ms)** |
+| **Investigation 1** | TOCTOU barrier test: removal commits during in-flight lookup $\rightarrow$ event dropped | N/A (New test) | **PASSED (195ms)** |
 | **Investigation 2** | Serialized dispatch: earlier event delayed by 60ms $\rightarrow$ in-order FIFO delivery | N/A (New test) | **PASSED (245ms)** |
-| **Investigation 3** | Database error during lookup drops event fail-safe without leakage | N/A (New test) | **PASSED (187ms)** |
-| **Investigation 3** | Session logout terminates open SSE socket and rejects reconnection with 401 | N/A (New test) | **PASSED (102ms)** |
-| **Investigation 3** | Multiple open connections for same user across tabs are updated and revoked consistently | N/A (New test) | **PASSED (166ms)** |
-| **Post-Commit Gap** | Removal commits and synchronously revokes in-memory auth without post-commit findById | FAILED (Timing gap) | **PASSED (201ms)** |
-| **Post-Commit Gap** | Voluntary leave commits and synchronously revokes without post-commit findById | FAILED (Timing gap) | **PASSED (185ms)** |
-| **Post-Commit Gap** | Database failure on findById does not impair member removal or revocation | FAILED (Crash/leak) | **PASSED (180ms)** |
-| **Multi-Instance** | Cross-instance MongoDB query prevents private event leak before outbox event arrives | N/A (New test) | **PASSED (188ms)** |
-| **Multi-Instance** | Out-of-order delayed member.left does not revoke newly joined team | N/A (New test) | **PASSED (94ms)** |
-| **Logout Scoping** | Logging out Session A terminates Session A socket while keeping Session B connected | N/A (New test) | **PASSED (83ms)** |
-| **Logout Scoping** | Session A cannot authenticate after logout, Session B remains fully valid | N/A (New test) | **PASSED (83ms)** |
+| **Investigation 3** | Database error during lookup drops event fail-safe without leakage | N/A (New test) | **PASSED (382ms)** |
+| **Investigation 3** | Session logout terminates active SSE socket and revokes session | N/A (New test) | **PASSED (199ms)** |
+| **Investigation 3** | Multiple open connections for same user across tabs are updated and revoked consistently | N/A (New test) | **PASSED (296ms)** |
+| **Post-Commit Gap** | Removal commits and synchronously revokes in-memory auth without post-commit findById | FAILED (Timing gap) | **PASSED (400ms)** |
+| **Post-Commit Gap** | Voluntary leave commits and synchronously revokes without post-commit findById | FAILED (Timing gap) | **PASSED (406ms)** |
+| **Post-Commit Gap** | Database failure on findById does not impair member removal or revocation | FAILED (Crash/leak) | **PASSED (378ms)** |
+| **Multi-Instance** | Cross-instance MongoDB query prevents private event leak before outbox event arrives | N/A (New test) | **PASSED (402ms)** |
+| **Multi-Instance** | Out-of-order delayed member.left does not revoke newly joined team | N/A (New test) | **PASSED (196ms)** |
+| **Logout Scoping** | Logging out Session A terminates Session A socket while keeping Session B connected | N/A (New test) | **PASSED (109ms)** |
+| **Logout Scoping** | Session A cannot authenticate after logout, Session B remains fully valid | N/A (New test) | **PASSED (146ms)** |
+| **Logout Isolation** | Session A has NO stream, Session B HAS stream $\rightarrow$ logging out A must NOT close B | FAILED (Fallback bug) | **PASSED (158ms)** |
+| **Account-Wide Revocation** | Explicit closeConnectionsForUser terminates all sessions for user across devices | N/A (New test) | **PASSED (150ms)** |
 
 ---
 
@@ -260,7 +263,7 @@ All verification suites were executed against the modified codebase:
 
 1. **API Integration Suite (`pnpm --filter @crewgrid/api test`):**
    - **14 / 14 test files passed**
-   - **124 / 124 tests passed** (including 50-way last-seat race, two-team race, leader succession, single-use invites, post-commit gap tests, and capacity bounds).
+   - **126 / 126 tests passed** (including 50-way last-seat race, two-team race, leader succession, single-use invites, post-commit gap tests, no-stream logout isolation, and capacity bounds).
 2. **Frontend Unit Suite (`pnpm --filter @crewgrid/web test`):**
    - **3 / 3 test files passed**
    - **14 / 14 tests passed** (AuthContext, named SSE events, hackathon routing).

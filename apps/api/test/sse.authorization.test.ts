@@ -596,8 +596,11 @@ describe('C01: SSE Authorization Security & Freshness Tests', () => {
     const { sessionCookie, csrfToken } = await createTestSession(user._id);
     const hackathon = await createTestHackathon();
 
+    const rawToken = sessionCookie.split(';')[0]!.split('=')[1] ?? '';
+    const tokenHash = hashToken(rawToken);
+
     const mockRes = createMockSseResponse();
-    connectionManager.addConnection(user._id, hackathon._id, null, mockRes);
+    connectionManager.addConnection(user._id, hackathon._id, null, mockRes, tokenHash);
 
     expect(connectionManager.getActiveConnectionsCount()).toBe(1);
 
@@ -965,5 +968,83 @@ describe('C01: SSE Authorization Security & Freshness Tests', () => {
       .set('Cookie', cookieB);
     expect(meResB.status).toBe(200);
     expect(meResB.body.data.id).toBe(user._id.toHexString());
+  });
+
+  it('Logout Isolation: Session A has NO stream, Session B HAS stream -> logging out A must NOT close B', async () => {
+    const user = await createTestUser();
+    const hackathon = await createTestHackathon();
+
+    // Session A (e.g. mobile app or background client without an SSE stream)
+    const { sessionCookie: cookieA, csrfToken: csrfA } = await createTestSession(user._id);
+    // Session B (e.g. desktop browser with an active SSE stream)
+    const { sessionCookie: cookieB } = await createTestSession(user._id);
+
+    const rawTokenB = cookieB.split(';')[0]!.split('=')[1] ?? '';
+    const tokenHashB = hashToken(rawTokenB);
+
+    // Session B opens an active SSE stream; Session A has no SSE connection
+    const mockResB = createMockSseResponse();
+    connectionManager.addConnection(user._id, hackathon._id, null, mockResB, tokenHashB);
+
+    expect(connectionManager.getActiveConnectionsCount()).toBe(1);
+    expect(mockResB.isClosed()).toBe(false);
+
+    // User logs out on Session A (which has NO active SSE stream)
+    const logoutResA = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA);
+    expect(logoutResA.status).toBe(204);
+
+    // CRITICAL: Session B's stream MUST REMAIN ACTIVE AND UNTOUCHED!
+    // (Previous unsafe fallback would have incorrectly terminated Session B here)
+    expect(mockResB.isClosed()).toBe(false);
+    expect(connectionManager.getActiveConnectionsCount()).toBe(1);
+
+    // Broadcast a public event: Session B continues to receive it
+    const testEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { title: 'Session B Survives Session A Logout' }
+    });
+    await connectionManager.broadcastEvent(testEvent);
+    expect(mockResB.getOutput()).toContain('Session B Survives Session A Logout');
+
+    // Confirm Session A is unauthenticated while Session B remains valid
+    const meA = await request(app).get('/api/v1/auth/me').set('Cookie', cookieA);
+    expect(meA.status).toBe(401);
+
+    const meB = await request(app).get('/api/v1/auth/me').set('Cookie', cookieB);
+    expect(meB.status).toBe(200);
+  });
+
+  it('Account-Wide Revocation: explicit closeConnectionsForUser terminates all sessions for user across devices', async () => {
+    const user = await createTestUser();
+    const hackathon = await createTestHackathon();
+
+    const { sessionCookie: cookieA } = await createTestSession(user._id);
+    const { sessionCookie: cookieB } = await createTestSession(user._id);
+
+    const rawTokenA = cookieA.split(';')[0]!.split('=')[1] ?? '';
+    const rawTokenB = cookieB.split(';')[0]!.split('=')[1] ?? '';
+
+    const mockResA = createMockSseResponse();
+    const mockResB = createMockSseResponse();
+
+    connectionManager.addConnection(user._id, hackathon._id, null, mockResA, hashToken(rawTokenA));
+    connectionManager.addConnection(user._id, hackathon._id, null, mockResB, hashToken(rawTokenB));
+
+    expect(connectionManager.getActiveConnectionsCount()).toBe(2);
+
+    // Explicit account-wide termination (e.g. security suspension or password reset)
+    const closedCount = connectionManager.closeConnectionsForUser(user._id);
+    expect(closedCount).toBe(2);
+
+    // Both sockets are terminated
+    expect(mockResA.isClosed()).toBe(true);
+    expect(mockResB.isClosed()).toBe(true);
+    expect(connectionManager.getActiveConnectionsCount()).toBe(0);
   });
 });

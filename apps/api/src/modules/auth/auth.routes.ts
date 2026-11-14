@@ -64,13 +64,7 @@ export function createAuthRouter(authService: AuthService = new AuthService()): 
         await authService.logout(rawToken, res);
         if (rawToken) {
           const tokenHash = hashToken(rawToken);
-          const closed = connectionManager.closeConnectionsForSession(tokenHash);
-          // If no connection matched tokenHash (e.g. legacy/test invocations), fallback to user closure
-          if (closed === 0 && req.user) {
-            connectionManager.closeConnectionsForUser(req.user._id);
-          }
-        } else if (req.user) {
-          connectionManager.closeConnectionsForUser(req.user._id);
+          connectionManager.closeConnectionsForSession(tokenHash);
         }
         res.status(204).end();
       } catch (err) {
