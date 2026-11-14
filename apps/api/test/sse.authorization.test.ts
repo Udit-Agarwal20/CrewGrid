@@ -12,6 +12,8 @@ import { connectionManager } from '../src/realtime/connection.manager.js';
 import { outboxDispatcher } from '../src/realtime/dispatcher.js';
 import { outboxRepo, OutboxEventDocument } from '../src/realtime/outbox.repo.js';
 import { membershipRepo } from '../src/modules/membership/membership.repo.js';
+import { teamRepo } from '../src/modules/teams/team.repo.js';
+import { hashToken } from '../src/middleware/session.js';
 
 describe('C01: SSE Authorization Security & Freshness Tests', () => {
   const app = createApp();
@@ -652,5 +654,316 @@ describe('C01: SSE Authorization Security & Freshness Tests', () => {
     expect(tab1.getOutput()).not.toContain('Multi-Tab Secret');
     expect(tab2.getOutput()).not.toContain('Multi-Tab Secret');
     expect(tab3.getOutput()).not.toContain('Multi-Tab Secret');
+  });
+
+  // ==========================================================================
+  // Post-Commit Revocation Gap & Synchronous Fix Verification
+  // ==========================================================================
+  it('Post-Commit Gap: removal commits and synchronously revokes in-memory authorization without post-commit findById', async () => {
+    const { hackathon, teamId, leaderCookie, leaderCsrf, member } = await setupTeamWithMember();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, mockRes);
+
+    const privateEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'request.created',
+      payload: { secret: 'Post-Commit Gap Zero-Latency Secret' }
+    });
+
+    // Track un-sessioned findById calls
+    let unSessionedFindByIdCalls = 0;
+    const origFindById = teamRepo.findById.bind(teamRepo);
+    teamRepo.findById = async (id, session) => {
+      if (!session) {
+        unSessionedFindByIdCalls++;
+      }
+      return origFindById(id, session);
+    };
+
+    let lookupStarted = false;
+    let resumeLookup: () => void = () => {};
+    const resumePromise = new Promise<void>((resolve) => {
+      resumeLookup = resolve;
+    });
+
+    const origFindTeamMembers = membershipRepo.findTeamMembers.bind(membershipRepo);
+    let barrierActive = true;
+
+    membershipRepo.findTeamMembers = async (tId, session) => {
+      const result = await origFindTeamMembers(tId, session);
+      if (barrierActive && tId.equals(teamId)) {
+        lookupStarted = true;
+        // Pre-removal snapshot obtained; pause broadcast
+        await resumePromise;
+      }
+      return result;
+    };
+
+    try {
+      // 1. Begin broadcast in background
+      const broadcastPromise = connectionManager.broadcastEvent(privateEvent);
+
+      while (!lookupStarted) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      // 2. Removal transaction executes and commits
+      const removeRes = await request(app)
+        .delete(`/api/v1/teams/${teamId.toHexString()}/members/${member._id.toHexString()}`)
+        .set('Cookie', leaderCookie)
+        .set('X-CSRF-Token', leaderCsrf);
+      expect(removeRes.status).toBe(204);
+
+      // Verify ZERO un-sessioned findById calls were made after commit
+      expect(unSessionedFindByIdCalls).toBe(0);
+
+      // Verify in-memory authorization was synchronously revoked to null immediately upon commit
+      const conns = connectionManager.getConnectionsForHackathon(hackathon._id);
+      const memberConn = conns.find((c) => c.userId.equals(member._id));
+      expect(memberConn).toBeDefined();
+      expect(memberConn!.teamId).toBeNull();
+
+      // 3. Resume broadcast with pre-removal DB snapshot
+      barrierActive = false;
+      resumeLookup();
+      await broadcastPromise;
+
+      // In-memory revocation prevented delivery fail-safe
+      expect(mockRes.getOutput()).not.toContain('Post-Commit Gap Zero-Latency Secret');
+    } finally {
+      teamRepo.findById = origFindById;
+      membershipRepo.findTeamMembers = origFindTeamMembers;
+    }
+  });
+
+  it('Post-Commit Gap: voluntary leave commits and synchronously revokes without post-commit findById', async () => {
+    const { hackathon, teamId, memberCookie, memberCsrf, member } = await setupTeamWithMember();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, mockRes);
+
+    let unSessionedFindByIdCalls = 0;
+    const origFindById = teamRepo.findById.bind(teamRepo);
+    teamRepo.findById = async (id, session) => {
+      if (!session) {
+        unSessionedFindByIdCalls++;
+      }
+      return origFindById(id, session);
+    };
+
+    try {
+      const leaveRes = await request(app)
+        .post(`/api/v1/teams/${teamId.toHexString()}/leave`)
+        .set('Cookie', memberCookie)
+        .set('X-CSRF-Token', memberCsrf);
+      expect(leaveRes.status).toBe(200);
+
+      // Verify ZERO un-sessioned findById calls occurred
+      expect(unSessionedFindByIdCalls).toBe(0);
+
+      // In-memory authorization must be null synchronously
+      const conns = connectionManager.getConnectionsForHackathon(hackathon._id);
+      const memberConn = conns.find((c) => c.userId.equals(member._id));
+      expect(memberConn).toBeDefined();
+      expect(memberConn!.teamId).toBeNull();
+    } finally {
+      teamRepo.findById = origFindById;
+    }
+  });
+
+  it('Post-Commit Gap: database failure on findById does not impair member removal or revocation', async () => {
+    const { hackathon, teamId, leaderCookie, leaderCsrf, member } = await setupTeamWithMember();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, mockRes);
+
+    const origFindById = teamRepo.findById.bind(teamRepo);
+    // If an un-sessioned findById was attempted post-commit, simulate database network failure
+    teamRepo.findById = async (id, session) => {
+      if (!session) {
+        throw new Error('SIMULATED_POST_COMMIT_CRASH');
+      }
+      return origFindById(id, session);
+    };
+
+    try {
+      const removeRes = await request(app)
+        .delete(`/api/v1/teams/${teamId.toHexString()}/members/${member._id.toHexString()}`)
+        .set('Cookie', leaderCookie)
+        .set('X-CSRF-Token', leaderCsrf);
+      expect(removeRes.status).toBe(204);
+
+      // Revocation succeeded synchronously without calling findById
+      const conns = connectionManager.getConnectionsForHackathon(hackathon._id);
+      const memberConn = conns.find((c) => c.userId.equals(member._id));
+      expect(memberConn).toBeDefined();
+      expect(memberConn!.teamId).toBeNull();
+    } finally {
+      teamRepo.findById = origFindById;
+    }
+  });
+
+  // ==========================================================================
+  // Multi-Instance Synchronization & Eventual Consistency Tests
+  // ==========================================================================
+  it('Multi-Instance: cross-instance query against MongoDB prevents private event leak before outbox event arrives', async () => {
+    const { hackathon, teamId, leaderCookie, leaderCsrf, member } = await setupTeamWithMember();
+
+    // Simulate remote server instance: Member has active SSE connection with cached teamId
+    const remoteMockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, remoteMockRes);
+
+    // Instance 1 handles member removal in DB transaction
+    const removeRes = await request(app)
+      .delete(`/api/v1/teams/${teamId.toHexString()}/members/${member._id.toHexString()}`)
+      .set('Cookie', leaderCookie)
+      .set('X-CSRF-Token', leaderCsrf);
+    expect(removeRes.status).toBe(204);
+
+    // Simulate that on Remote Instance, in-memory conn.teamId is still pointing to teamId
+    // (e.g. outbox event has not yet been processed across instances)
+    const conns = connectionManager.getConnectionsForHackathon(hackathon._id);
+    const memberConn = conns.find((c) => c.userId.equals(member._id));
+    expect(memberConn).toBeDefined();
+    // Deliberately reset teamId to simulate delayed outbox notification on remote instance
+    memberConn!.teamId = teamId;
+
+    const privateEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'request.created',
+      payload: { secret: 'Cross-Instance Sensitive Data' }
+    });
+
+    // Remote instance executes broadcast: Layer 2 queries MongoDB findTeamMembers
+    await connectionManager.broadcastEvent(privateEvent);
+
+    // Delivery is blocked because MongoDB confirmed member is no longer active in team
+    expect(remoteMockRes.getOutput()).not.toContain('Cross-Instance Sensitive Data');
+
+    // Now outbox event arrives on remote instance:
+    const outboxLeaveEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'member.left',
+      payload: { teamId: teamId.toHexString(), userId: member._id.toHexString() }
+    });
+    await outboxDispatcher.handleEvent(outboxLeaveEvent);
+
+    // In-memory authorization on remote instance is now updated to null
+    expect(memberConn!.teamId).toBeNull();
+  });
+
+  it('Multi-Instance: out-of-order delayed member.left does not revoke newly joined team', async () => {
+    const hackathon = await createTestHackathon();
+    const user = await createTestUser();
+    const oldTeamId = new ObjectId();
+    const newTeamId = new ObjectId();
+
+    const mockRes = createMockSseResponse();
+    // User is currently connected and authorized for newTeamId
+    connectionManager.addConnection(user._id, hackathon._id, newTeamId, mockRes);
+
+    const conns = connectionManager.getConnectionsForHackathon(hackathon._id);
+    const conn = conns.find((c) => c.userId.equals(user._id));
+    expect(conn!.teamId).toEqual(newTeamId);
+
+    // A delayed outbox event from oldTeamId arrives
+    const delayedOldLeaveEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId: oldTeamId,
+      scope: 'team',
+      eventType: 'member.left',
+      payload: { teamId: oldTeamId.toHexString(), userId: user._id.toHexString() }
+    });
+
+    await outboxDispatcher.handleEvent(delayedOldLeaveEvent);
+
+    // ExpectedCurrentTeamId protection ensures newTeamId is NOT cleared
+    expect(conn!.teamId).toEqual(newTeamId);
+  });
+
+  // ==========================================================================
+  // Session Logout Behavior & Multi-Device Isolation Tests
+  // ==========================================================================
+  it('Logout Behavior: logging out of Session A terminates Session A socket while keeping Session B connected', async () => {
+    const user = await createTestUser();
+    const hackathon = await createTestHackathon();
+
+    // Session A (Laptop)
+    const { sessionCookie: cookieA, csrfToken: csrfA } = await createTestSession(user._id);
+    // Session B (Phone)
+    const { sessionCookie: cookieB } = await createTestSession(user._id);
+
+    // Extract raw tokens from cookies
+    const rawTokenA = cookieA.split(';')[0]!.split('=')[1] ?? '';
+    const rawTokenB = cookieB.split(';')[0]!.split('=')[1] ?? '';
+    const tokenHashA = hashToken(rawTokenA);
+    const tokenHashB = hashToken(rawTokenB);
+
+    const mockResA = createMockSseResponse();
+    const mockResB = createMockSseResponse();
+
+    connectionManager.addConnection(user._id, hackathon._id, null, mockResA, tokenHashA);
+    connectionManager.addConnection(user._id, hackathon._id, null, mockResB, tokenHashB);
+
+    expect(connectionManager.getActiveConnectionsCount()).toBe(2);
+
+    // User logs out of Session A (Laptop)
+    const logoutRes = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA);
+    expect(logoutRes.status).toBe(204);
+
+    // Session A socket must be terminated
+    expect(mockResA.isClosed()).toBe(true);
+
+    // Session B socket MUST REMAIN CONNECTED!
+    expect(mockResB.isClosed()).toBe(false);
+    expect(connectionManager.getActiveConnectionsCount()).toBe(1);
+
+    // Broadcast a public event
+    const publicEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { title: 'Broadcast to Session B' }
+    });
+    await connectionManager.broadcastEvent(publicEvent);
+
+    expect(mockResB.getOutput()).toContain('Broadcast to Session B');
+  });
+
+  it('Logout Behavior: Session A cannot authenticate after logout, Session B remains fully valid', async () => {
+    const user = await createTestUser();
+
+    const { sessionCookie: cookieA, csrfToken: csrfA } = await createTestSession(user._id);
+    const { sessionCookie: cookieB } = await createTestSession(user._id);
+
+    // Logout Session A
+    await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA);
+
+    // Session A is revoked
+    const meResA = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', cookieA);
+    expect(meResA.status).toBe(401);
+
+    // Session B is still valid
+    const meResB = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', cookieB);
+    expect(meResB.status).toBe(200);
+    expect(meResB.body.data.id).toBe(user._id.toHexString());
   });
 });

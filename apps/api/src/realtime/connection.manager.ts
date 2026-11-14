@@ -11,6 +11,7 @@ export interface SseClientConnection {
   hackathonId: ObjectId;
   teamId: ObjectId | null;
   res: Response;
+  tokenHash?: string;
   connectedAt: Date;
 }
 
@@ -37,7 +38,8 @@ export class ConnectionManager {
     userId: ObjectId,
     hackathonId: ObjectId,
     teamId: ObjectId | null,
-    res: Response
+    res: Response,
+    tokenHash?: string
   ): string {
     const connectionId = crypto.randomUUID();
     const conn: SseClientConnection = {
@@ -46,6 +48,7 @@ export class ConnectionManager {
       hackathonId,
       teamId,
       res,
+      tokenHash,
       connectedAt: new Date()
     };
 
@@ -66,10 +69,20 @@ export class ConnectionManager {
     }
   }
 
-  updateClientTeam(userId: ObjectId, hackathonId: ObjectId | undefined, newTeamId: ObjectId | null): void {
+  updateClientTeam(
+    userId: ObjectId,
+    hackathonId: ObjectId | undefined,
+    newTeamId: ObjectId | null,
+    expectedCurrentTeamId?: ObjectId | null
+  ): void {
     for (const conn of this.connections.values()) {
       if (conn.userId.equals(userId)) {
         if (!hackathonId || conn.hackathonId.equals(hackathonId)) {
+          // If revoking (newTeamId === null) and expectedCurrentTeamId is specified,
+          // only clear if the connection's current teamId matches expectedCurrentTeamId.
+          if (newTeamId === null && expectedCurrentTeamId && conn.teamId && !conn.teamId.equals(expectedCurrentTeamId)) {
+            continue;
+          }
           conn.teamId = newTeamId;
         }
       }
@@ -78,7 +91,8 @@ export class ConnectionManager {
       {
         userId: userId.toHexString(),
         hackathonId: hackathonId ? hackathonId.toHexString() : 'all',
-        newTeamId: newTeamId ? newTeamId.toHexString() : null
+        newTeamId: newTeamId ? newTeamId.toHexString() : null,
+        expectedCurrentTeamId: expectedCurrentTeamId ? expectedCurrentTeamId.toHexString() : null
       },
       'Updated client team authorization'
     );
@@ -88,7 +102,28 @@ export class ConnectionManager {
     this.updateClientTeam(userId, hackathonId, null);
   }
 
-  closeConnectionsForUser(userId: ObjectId): void {
+  closeConnectionsForSession(tokenHash: string): number {
+    const toRemove: string[] = [];
+    for (const [id, conn] of this.connections.entries()) {
+      if (conn.tokenHash === tokenHash) {
+        try {
+          conn.res.end();
+        } catch {
+          // ignore
+        }
+        toRemove.push(id);
+      }
+    }
+    for (const id of toRemove) {
+      this.connections.delete(id);
+    }
+    if (toRemove.length > 0) {
+      logger.debug({ tokenHash, closedCount: toRemove.length }, 'Closed SSE connections for session');
+    }
+    return toRemove.length;
+  }
+
+  closeConnectionsForUser(userId: ObjectId): number {
     const toRemove: string[] = [];
     for (const [id, conn] of this.connections.entries()) {
       if (conn.userId.equals(userId)) {
@@ -106,6 +141,7 @@ export class ConnectionManager {
     if (toRemove.length > 0) {
       logger.debug({ userId: userId.toHexString(), closedCount: toRemove.length }, 'Closed SSE connections for user');
     }
+    return toRemove.length;
   }
 
   getActiveConnectionsCount(): number {

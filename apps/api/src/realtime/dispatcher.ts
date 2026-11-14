@@ -100,7 +100,7 @@ export class OutboxDispatcher {
       const payloadUserId = (event.payload as Record<string, unknown>)['userId'];
       if (typeof payloadUserId === 'string' && ObjectId.isValid(payloadUserId)) {
         if (event.eventType === 'member.left') {
-          connectionManager.updateClientTeam(new ObjectId(payloadUserId), event.hackathonId, null);
+          connectionManager.updateClientTeam(new ObjectId(payloadUserId), event.hackathonId, null, event.teamId);
         } else if (event.eventType === 'member.joined') {
           connectionManager.updateClientTeam(new ObjectId(payloadUserId), event.hackathonId, event.teamId);
         }

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service.js';
 import { validateRequest } from '../../middleware/validation.js';
-import { requireAuth } from '../../middleware/session.js';
+import { requireAuth, hashToken } from '../../middleware/session.js';
 import { createRateLimiter } from '../../middleware/rate-limit.js';
 import { RegisterRequestSchema, LoginRequestSchema, SuccessEnvelope } from '@crewgrid/contracts';
 import { env } from '../../config/env.js';
@@ -62,7 +62,14 @@ export function createAuthRouter(authService: AuthService = new AuthService()): 
       try {
         const rawToken = req.cookies?.[env.SESSION_COOKIE_NAME];
         await authService.logout(rawToken, res);
-        if (req.user) {
+        if (rawToken) {
+          const tokenHash = hashToken(rawToken);
+          const closed = connectionManager.closeConnectionsForSession(tokenHash);
+          // If no connection matched tokenHash (e.g. legacy/test invocations), fallback to user closure
+          if (closed === 0 && req.user) {
+            connectionManager.closeConnectionsForUser(req.user._id);
+          }
+        } else if (req.user) {
           connectionManager.closeConnectionsForUser(req.user._id);
         }
         res.status(204).end();
