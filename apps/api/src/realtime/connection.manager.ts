@@ -255,7 +255,7 @@ export class ConnectionManager {
     return `id: ${event._id.toHexString()}\nevent: ${event.eventType}\ndata: ${data}\n\n`;
   }
 
-  formatSyncGapMessage(_hackathonId: ObjectId, reason: 'overflow' | 'expired'): string {
+  formatSyncGapMessage(_hackathonId: ObjectId, reason: 'overflow' | 'expired' | 'fallback'): string {
     const data = JSON.stringify({
       gap: true,
       reason

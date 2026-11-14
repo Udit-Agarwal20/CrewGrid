@@ -758,4 +758,342 @@ describe('C02: Outbox & SSE Delivery Reliability Regression Tests', () => {
     // Flush buffer
     await connectionManager.flushBuffer(connectionId, new Set());
   });
+
+  // --------------------------------------------------------------------------
+  // 14. Finding 1: Polling-order vs commit-order during change-stream outage & cold restart
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION FINDING 1: reversed ObjectId commit ordering during change-stream outage triggers explicit sync.gap on replay', async () => {
+    const hackathon1 = await createTestHackathon();
+    const hackathon2 = await createTestHackathon();
+    const user = await createTestUser();
+    const { sessionCookie } = await createTestSession(user._id);
+    const db = getDatabase();
+
+    // Event B has higher ObjectId but commits at T1
+    const idB = new ObjectId();
+    // Event A has lower ObjectId (allocated earlier) but commits at T2
+    const idA = makeObjectIdWithTimestamp(10);
+    expect(idA.toHexString() < idB.toHexString()).toBe(true);
+
+    const now = new Date();
+    const docB: OutboxEventDocument = {
+      _id: idB,
+      hackathonId: hackathon1._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Committed First at T1 (Higher ID B)' },
+      createdAt: new Date(now.getTime() - 5000),
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    const docA: OutboxEventDocument = {
+      _id: idA,
+      hackathonId: hackathon1._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Committed Second at T2 (Lower ID A)' },
+      createdAt: new Date(now.getTime() - 4000),
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    const docOther: OutboxEventDocument = {
+      _id: new ObjectId(),
+      hackathonId: hackathon2._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Other Hackathon Event' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+
+    await db.collection('realtime_events').insertMany([docB, docA, docOther]);
+
+    // Simulate change-stream outage: start dispatcher in polling-only recovery mode
+    const fallbackDispatcher = new OutboxDispatcher();
+    (fallbackDispatcher as any).changeStream = null;
+    (fallbackDispatcher as any).isRunning = true;
+
+    // Poller runs recovery
+    await fallbackDispatcher.pollAndDispatch();
+
+    // Verify polling recovery occurred
+    expect(fallbackDispatcher.hasFallbackOccurred()).toBe(true);
+
+    // Browser client reconnects with Last-Event-ID = idB
+    // In flawed implementation:
+    // Polling sorted by _id: 1 and put [A, B] into commitOrderedBuffer, or DB replay queried _id > idB.
+    // In both cases, Event A (committed second with lower ID) was permanently lost during replay!
+    // In robust implementation:
+    // Since commit order cannot be demonstrated from polling/fallback, replay returns sync.gap!
+    const replayResult = await fallbackDispatcher.getReplayEvents(hackathon1._id, idB, 10);
+    expect(replayResult.gap).toBe(true);
+    expect(replayResult.reason).toBe('fallback');
+
+    // Also verify cold restart with empty in-memory replay buffer while running returns sync.gap
+    const restartDispatcher = new OutboxDispatcher();
+    (restartDispatcher as any).isRunning = true; // Simulates running instance after cold restart before buffer fills
+    const coldReplayResult = await restartDispatcher.getReplayEvents(hackathon1._id, idB, 10);
+    expect(coldReplayResult.gap).toBe(true);
+    expect(coldReplayResult.reason).toBe('fallback');
+
+    // Verify HTTP SSE stream emits sync.gap on polling fallback
+    vi.spyOn(outboxDispatcher, 'getReplayEvents').mockImplementationOnce(async (hid, lastId, limit) => {
+      return fallbackDispatcher.getReplayEvents(hid, lastId, limit);
+    });
+    const { output } = await connectSseStream({
+      cookie: sessionCookie,
+      hackathonId: hackathon1._id.toHexString(),
+      lastEventId: idB.toHexString(),
+      durationMs: 400
+    });
+    expect(output).toContain('event: sync.gap');
+    expect(output).toContain('"reason":"fallback"');
+
+    await fallbackDispatcher.stop();
+    await restartDispatcher.stop();
+    vi.restoreAllMocks();
+  });
+
+  // --------------------------------------------------------------------------
+  // 15. Finding 2: Direct replay authoritative membership verification at delivery time
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION FINDING 2: user removed in DB while replay is in-flight -> replay MUST NOT disclose private team events', async () => {
+    const hackathon = await createTestHackathon();
+    const teamId = new ObjectId();
+    const user = await createTestUser();
+    const { sessionCookie } = await createTestSession(user._id);
+    const db = getDatabase();
+
+    // 1. User starts as active member in DB
+    await db.collection('memberships').insertOne({
+      hackathonId: hackathon._id,
+      teamId,
+      userId: user._id,
+      role: 'member',
+      joinedAt: new Date()
+    });
+
+    const baseEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Base Public Team' }
+    });
+
+    // Insert a private team event, a public event, and a user-scoped event
+    const now = new Date();
+    const privateEvent = {
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId,
+      userId: null,
+      scope: 'team' as const,
+      eventType: 'request.created' as const,
+      payload: { secret: 'Secret Team Replay Intel' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    const publicEvent = {
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon' as const,
+      eventType: 'team.updated' as const,
+      payload: { announcement: 'Public Hackathon Update' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    const userScopedEvent = {
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId: null,
+      userId: user._id,
+      scope: 'user' as const,
+      eventType: 'invite.created' as const,
+      payload: { inviteCode: 'USER-SPECIFIC-CODE' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    await db.collection('realtime_events').insertMany([privateEvent, publicEvent, userScopedEvent]);
+
+    // Hook getReplayEvents to remove user from team in DB during replay lookup
+    const originalGetReplay = outboxDispatcher.getReplayEvents.bind(outboxDispatcher);
+    vi.spyOn(outboxDispatcher, 'getReplayEvents').mockImplementation(async (hid, lastId, limit) => {
+      const res = await originalGetReplay(hid, lastId, limit);
+      // SIMULATE: Member removal transaction commits in database right now!
+      // But connectionManager in-memory cached teamId has NOT been updated yet
+      await db.collection('memberships').deleteOne({ userId: user._id, hackathonId: hackathon._id });
+      return res;
+    });
+
+    const { output, statusCode } = await connectSseStream({
+      cookie: sessionCookie,
+      hackathonId: hackathon._id.toHexString(),
+      lastEventId: baseEvent._id.toHexString(),
+      durationMs: 400
+    });
+
+    expect(statusCode).toBe(200);
+    // In the flawed implementation:
+    // Replay loop checked connectionManager.getClientTeamId(connectionId) which was still teamId!
+    // Private event was leaked to the removed user!
+    // In the robust implementation:
+    // Replay loop authoritatively checks membershipRepo.findActiveMembership at delivery time.
+    // Private team event MUST NOT be disclosed!
+    expect(output).not.toContain('Secret Team Replay Intel');
+    // Public and user-scoped events MUST still be delivered!
+    expect(output).toContain('Public Hackathon Update');
+    expect(output).toContain('USER-SPECIFIC-CODE');
+
+    vi.restoreAllMocks();
+  });
+
+  it('REPRODUCTION FINDING 2: transient DB error during replay authorization suppresses private event without cache corruption', async () => {
+    const hackathon = await createTestHackathon();
+    const teamId = new ObjectId();
+    const user = await createTestUser();
+    const { sessionCookie } = await createTestSession(user._id);
+    const db = getDatabase();
+
+    // User is active member in DB
+    await db.collection('memberships').insertOne({
+      hackathonId: hackathon._id,
+      teamId,
+      userId: user._id,
+      role: 'member',
+      joinedAt: new Date()
+    });
+
+    const baseEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Base Public Team' }
+    });
+
+    const now = new Date();
+    const privateEvent = {
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId,
+      userId: null,
+      scope: 'team' as const,
+      eventType: 'request.created' as const,
+      payload: { secret: 'Transient Error Private Intel' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    await db.collection('realtime_events').insertOne(privateEvent);
+
+    // Mock membershipRepo.findActiveMembership to throw transient error specifically during replay delivery
+    let callCount = 0;
+    const originalFindActive = membershipRepo.findActiveMembership.bind(membershipRepo);
+    let errorThrown = false;
+    vi.spyOn(membershipRepo, 'findActiveMembership').mockImplementation(async (hid, uid, session) => {
+      callCount++;
+      if (callCount === 1) {
+        // Initial SSE route connection setup succeeds
+        return originalFindActive(hid, uid, session);
+      }
+      // Subsequent call (during replay delivery authorization) throws transient DB error
+      errorThrown = true;
+      throw new Error('Transient MongoDB connection pool timeout during replay');
+    });
+
+    const { output, statusCode } = await connectSseStream({
+      cookie: sessionCookie,
+      hackathonId: hackathon._id.toHexString(),
+      lastEventId: baseEvent._id.toHexString(),
+      durationMs: 400
+    });
+
+    expect(statusCode).toBe(200);
+    expect(errorThrown).toBe(true);
+    // Private event MUST be suppressed on transient error (fail-safe zero leakage)
+    expect(output).not.toContain('Transient Error Private Intel');
+
+    vi.restoreAllMocks();
+  });
+
+  // --------------------------------------------------------------------------
+  // 16. Finding 3: Poller starvation beyond 1,000 events & bounded progress
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION FINDING 3: lookback window with 1,500 events -> bounded poller makes progress across cycles without starving events 1001-1500', async () => {
+    const hackathon = await createTestHackathon();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+    const db = getDatabase();
+
+    // Register active listener
+    connectionManager.addConnection(user._id, hackathon._id, null, mockRes, 'tok-starvation-1500');
+
+    // Insert 1,500 events within lookback window
+    const now = new Date();
+    const bulkDocs = [];
+    for (let i = 1; i <= 1500; i++) {
+      bulkDocs.push({
+        _id: new ObjectId(),
+        hackathonId: hackathon._id,
+        teamId: null,
+        userId: null,
+        scope: 'public-hackathon' as const,
+        eventType: 'team.created' as const,
+        payload: { itemIndex: i },
+        createdAt: new Date(now.getTime() - (1500 - i) * 10), // chronologically incrementing within lookback
+        expiresAt: new Date(now.getTime() + 7200000)
+      });
+    }
+    await db.collection('realtime_events').insertMany(bulkDocs);
+
+    const pollerDispatcher = new OutboxDispatcher();
+    // In polling-only mode (change stream disabled)
+    (pollerDispatcher as any).changeStream = null;
+    (pollerDispatcher as any).isRunning = true;
+
+    // Cycle 1: bounded work (processes up to 10 batches = 1,000 events)
+    const cycle1Count = await pollerDispatcher.pollAndDispatch();
+    expect(cycle1Count).toBe(1000);
+    expect(pollerDispatcher.getPollCursor()).not.toBeNull();
+
+    // In the flawed implementation:
+    // lastBatchId was local and reset to null on each pollAndDispatch() call!
+    // Calling pollAndDispatch() in Cycle 2 re-scanned the first 1,000 records, found they were all dispatched,
+    // hit the 10-batch limit, and returned 0! Events 1001..1500 were permanently starved!
+    // In the robust implementation:
+    // pollCursor is maintained across cycles, so Cycle 2 resumes at event 1,000!
+    const cycle2Count = await pollerDispatcher.pollAndDispatch();
+    expect(cycle2Count).toBe(500);
+
+    // After finishing all available events, pollCursor resets to null for next full window sweep
+    expect(pollerDispatcher.getPollCursor()).toBeNull();
+
+    // Verify mockRes received both event 1,000 and event 1,500
+    const out = mockRes.getOutput();
+    expect(out).toContain('"itemIndex":1');
+    expect(out).toContain('"itemIndex":1000');
+    expect(out).toContain('"itemIndex":1001');
+    expect(out).toContain('"itemIndex":1500');
+
+    // Cycle 3: cursor is null, sweeps from since again, all 1500 are dispatched -> returns 0
+    const cycle3Count = await pollerDispatcher.pollAndDispatch();
+    expect(cycle3Count).toBe(0);
+
+    // Test time-window expiration: if cursor is artificially set to an expired date (>60s ago)
+    (pollerDispatcher as any).pollCursor = {
+      createdAt: new Date(Date.now() - 120000),
+      _id: new ObjectId()
+    };
+    // Clear collection to verify cursor is reset to null when expired
+    await db.collection('realtime_events').deleteMany({});
+    await pollerDispatcher.pollAndDispatch();
+    // Cursor should have been reset to null due to window expiration
+    expect(pollerDispatcher.getPollCursor()).toBeNull();
+
+    await pollerDispatcher.stop();
+  });
 });

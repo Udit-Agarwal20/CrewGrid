@@ -86,10 +86,21 @@ export function createSseRouter(): Router {
               if (event.scope === 'public-hackathon') {
                 authorized = true;
               } else if (event.scope === 'team') {
-                // Re-verify current live authorization at delivery boundary
+                // Authoritative membership verification at delivery time (Finding 2)
                 const currentTeamId = connectionManager.getClientTeamId(connectionId);
                 if (currentTeamId && event.teamId?.equals(currentTeamId)) {
-                  authorized = true;
+                  try {
+                    const active = await membershipRepo.findActiveMembership(hackathonId, req.user!._id);
+                    if (active && active.teamId.equals(event.teamId)) {
+                      authorized = true;
+                    } else {
+                      // Stale cache defense: clear revoked team authorization on connection
+                      connectionManager.updateClientTeam(req.user!._id, hackathonId, null, event.teamId);
+                    }
+                  } catch {
+                    // Fail-safe: suppress delivery on transient DB failure
+                    authorized = false;
+                  }
                 }
               } else if (event.scope === 'user' && event.userId?.equals(req.user!._id)) {
                 authorized = true;

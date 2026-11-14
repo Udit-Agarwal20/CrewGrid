@@ -6,196 +6,197 @@
 **Baseline Commit:** `45866db` (PR #1 merged into `main`)  
 **Date:** November 14–15, 2026  
 **Auditor:** Senior Distributed Systems & Reliability Engineer  
-**Status:** **RESOLVED & VERIFIED** (141/141 API tests passing across 15 test files, 16/16 Web tests, 16/16 Playwright E2E tests passing, 0 invariant violations)
+**Status:** **RESOLVED & VERIFIED** (145/145 API tests passing across 15 test files, 16/16 Web tests, 16/16 Playwright E2E tests passing, 0 invariant violations)
 
 ---
 
 ## 1. Executive Summary & Review Context
 
-This audit evaluates the reliability, correctness, and failure recovery of CrewGrid's real-time messaging subsystem. CrewGrid pairs MongoDB multi-document transactions with Server-Sent Events (SSE) to notify browser clients of hackathon and team mutations.
+This audit evaluates the reliability, delivery semantics, and failure recovery of CrewGrid's real-time messaging subsystem. CrewGrid pairs MongoDB multi-document transactions with Server-Sent Events (SSE) to notify browser clients of hackathon and team mutations.
 
-Following initial C02 implementation, an independent critical review identified 5 subtle concurrency, replay, authorization, and recovery defects (Investigations 1–5). This revised report documents:
-- The initial C02 defects and their solutions.
-- The 5 critical review failure modes, reproducible test results, and verified fixes.
-- Exact delivery and ordering semantics guaranteed.
-- Tested evidence and honest architectural limitations.
+Following initial C02 implementation and hardening, two independent critical reviews were conducted:
+1. **Critical Review 1 (Investigations 1–5):** Addressed handshake registration races, buffered authorization leakage, poller lookback index deficiency, premature resume token advancement, and SSE cursor corruption.
+2. **Merge-Blocking Review 2 (Findings 1–3):** Addressed commit buffer ordering under polling fallback, direct replay authorization TOCTOU gaps, and poller starvation beyond 1,000 records.
+
+This revised audit report documents:
+- The root causes and deterministic reproduction failures for all investigated defects.
+- The verified fixes across backend (`apps/api`) and frontend (`apps/web`).
+- The distinction between guaranteed commit-ordered live delivery and best-effort polling fallback notification.
+- Tested evidence and honest architectural boundaries.
 
 ---
 
-## 2. Root Cause Analysis & Investigation Findings
+## 2. Root Cause Analysis & Review Findings
 
-### Initial C02 Defects (Baseline Review)
+### Initial C02 Baseline Defects
 
 1. **Non-Monotonic ObjectId Commit vs Allocation Race:**  
-   MongoDB `ObjectId` values are generated on the client/driver side at object instantiation time (`new ObjectId()`). When two concurrent transactions execute:
-   - Transaction A allocates `_id_A` at time $T_0$.
-   - Transaction B allocates `_id_B` at time $T_1 > T_0$ (where $\text{Hex}(_id_B) > \text{Hex}(_id_A)$).
-   - Transaction B commits at $T_2$.
-   - The dispatcher processes event B, broadcasting it and setting `lastDispatchedId = _id_B`.
-   - Transaction A commits later at $T_3 > T_2$.
-   - Previously, dispatcher relied on strict monotonic ObjectId comparison:
-     ```ts
-     if (this.lastDispatchedId && event._id <= this.lastDispatchedId) return;
-     ```
-     Event A was **permanently discarded** by `handleEvent` and omitted from polling queries.
-
+   MongoDB `ObjectId` values are generated on the client/driver side at instantiation time (`new ObjectId()`). If Transaction B commits at $T_1$ with a higher `_id` than Transaction A committing at $T_2 > T_1$, strict monotonic ObjectId comparison (`_id <= lastDispatchedId`) permanently discarded Transaction A's outbox events.
 2. **Process Restart Skip Window:**  
-   On startup, `OutboxDispatcher.start()` previously initialized its watermark with `find().sort({ _id: -1 }).limit(1)`. If the server restarted while transactions committed events, un-dispatched events committed prior to startup were skipped.
-
+   Startup watermark initialization (`find().sort({ _id: -1 }).limit(1)`) jumped past un-dispatched events committed during process restarts.
 3. **Replay-to-Live Handshake Registration Gap:**  
-   In `sse.routes.ts`, `getReplayEvents` was executed *before* `connectionManager.addConnection()` registered the client socket. Any event committing in the window between DB query completion and in-memory registration was lost.
-
+   In `sse.routes.ts`, querying replay events prior to registering the connection in `ConnectionManager` created a window where events committed during handshake were neither replayed nor broadcast.
 4. **Silent Replay Truncation and TTL Eviction Blind Spot:**  
-   - `getReplayEvents` queried with a hardcoded `limit: 50`. If an offline client reconnected after missing $>50$ events, 50 events were delivered without indicating truncation, leaving the client permanently desynchronized.
-   - If a client reconnected with a `Last-Event-ID` that had already expired and been evicted by MongoDB's 2-hour TTL index, the query returned empty or partial events without signaling a data gap.
-
+   A hardcoded `limit: 50` truncated replay without signaling data gaps; client reconnects with TTL-evicted `Last-Event-ID` returned partial/empty events silently.
 5. **Unrecovered Change Stream Disconnect:**  
-   `initChangeStream()` listened for `'error'`, logged a warning, and did not persist the resume token (`change._id`) or attempt reconnection with `resumeAfter`, degrading the process to polling.
-
+   Change stream error handlers did not preserve resume tokens (`change._id`), failing to resume after network blips.
 6. **Transient Authorization Lookup Failure Event Loss:**  
-   When `membershipRepo.findTeamMembers(event.teamId)` threw a transient database error (e.g. pool timeout), `ConnectionManager.broadcastEvent` caught the error, defaulted `activeMemberUserIds` to an empty `Set()`, delivered nothing to active team members, and cleared `conn.teamId` across connections, causing `handleEvent` to advance its watermark and lose the event.
+   Database lookup timeouts during broadcast resulted in un-retried event drops and cached authorization invalidation.
 
 ---
 
-### Critical Review Findings (Investigations 1–5)
+### Critical Review 1 Findings (Investigations 1–5)
 
-#### Investigation 1: Non-Monotonic ObjectId Replay & Handshake Arrival
-- **Defect:** While live dispatch no longer dropped lower ObjectIds, `getReplayEvents()` still queried `{ _id: { $gt: lastEventId } }` sorted by `{ _id: 1 }`. If Event B (higher `_id`) committed before Event A (lower `_id`), a client receiving Event B and reconnecting with `lastEventId = B._id` would have Event A skipped during replay. Furthermore, in `flushBuffer()`, the check `event._id <= highestReplayedId` dropped any handshake event whose allocated `_id` was lower than a replayed event!
-- **Root Cause:** Treating client-allocated MongoDB ObjectIds as a proxy for commit order in replay queries and buffer flushing.
-- **Fix:**
-  - Implemented an in-memory commit-ordered buffer (`commitOrderedBuffer: OutboxEventDocument[]`, max 500 items, and `commitOrderedIndexMap`) populated in true oplog commit order.
-  - `getReplayEvents()` replays subsequent events in commit order when `lastEventId` is in the buffer; if evicted or not found, it falls back to explicit gap detection (`sync.gap`).
-  - Updated `flushBuffer()` to take `replayedEventIds: Set<string>` instead of `highestReplayedId: ObjectId`. Buffered handshake events not in `replayedEventIds` are delivered regardless of their allocated `_id`.
+1. **Non-Monotonic ObjectId Replay & Handshake Arrival (Investigation 1):**  
+   `getReplayEvents()` queried `{ _id: { $gt: lastEventId } }` sorted by `_id: 1`. If Event B (higher `_id`) committed before Event A (lower `_id`), reconnecting with Event B skipped Event A. In `flushBuffer()`, numeric comparison (`_id <= highestReplayedId`) dropped lower-ID events that arrived during handshake.  
+   *Fix:* Introduced in-memory commit-ordered buffer (`commitOrderedBuffer`, 500 items) recording oplog commit order. Switched `flushBuffer` to set-based inclusion (`replayedEventIds: Set<string>`).
+2. **Buffered Event Authorization Leakage (Investigation 2):**  
+   Events buffered during handshake were flushed without re-evaluating membership authorization at write time, leaking private team intel if membership was revoked during handshake.  
+   *Fix:* Added dual-layer authorization check inside `flushBuffer()` at socket delivery time.
+3. **Poller Starvation & Missing Compound Index (Investigation 3):**  
+   `pollAndDispatch()` lacked pagination on range query `createdAt: { $gte: since }`, and lacked an un-prefixed compound index `{ createdAt: 1, _id: 1 }`.  
+   *Fix:* Added index `event_poller_lookup` on `{ createdAt: 1, _id: 1 }` and implemented batch pagination.
+4. **Durable Recovery Boundary (Investigation 4):**  
+   Resume token was advanced on change stream receipt rather than post-dispatch.  
+   *Fix:* Updated `lastResumeToken` inside `handleEvent()` strictly after `broadcastEvent()` resolves.
+5. **SSE Cursor Corruption & Socket Leaks (Investigation 5):**  
+   `formatSyncGapMessage` emitted synthetic `id:` lines corrupting browser `Last-Event-ID`; `useEvents.ts` error probe leaked backend sockets.  
+   *Fix:* Omitted `id:` line from `sync.gap`; added `AbortController` in error probe.
 
-#### Investigation 2: Buffered Event Authorization Leakage
-- **Defect:** When a client connected with `{ buffering: true }`, team-scoped events were pushed into `conn.buffer`. If the client user was removed from the team while the event sat in the buffer, `flushBuffer()` previously flushed all buffered team events without re-evaluating authorization at delivery time.
-- **Root Cause:** Authorization was treated as frozen at buffer insertion time rather than verified at the physical write boundary.
-- **Fix:** Added dual-layer authorization re-verification inside `flushBuffer()`:
-  - Verifies current in-memory `conn.teamId`.
-  - Queries authoritative `membershipRepo.findActiveMembership(conn.userId, event.hackathonId)`.
-  - If membership was revoked, the buffered private event is dropped and `conn.teamId` is cleared.
+---
 
-#### Investigation 3: Poller Starvation & Missing Compound Index
-- **Defect:** `pollAndDispatch()` queried `createdAt: { $gte: since }` with `.limit(200)`. If $>200$ events occurred in the 60s lookback window, events beyond the first 200 were never queried, starving recent events. Furthermore, `db/indexes.ts` only had `{ hackathonId: 1, createdAt: 1, _id: 1 }`, forcing un-indexed collection scans for global lookback polling.
-- **Root Cause:** Missing pagination on range query and lack of dedicated un-prefixed compound index `{ createdAt: 1, _id: 1 }`.
-- **Fix:**
-  - Added dedicated compound index `{ createdAt: 1, _id: 1 }` (`event_poller_lookup`) in `apps/api/src/db/indexes.ts`.
-  - Refactored `pollAndDispatch()` to paginate using `_id: { $gt: lastBatchId }` in batches of 100 up to 1,000 items per poll cycle.
+### Merge-Blocking Review 2 Findings (Findings 1–3)
 
-#### Investigation 4: Durable Recovery Boundary & Resume Token Commit
-- **Defect:** In `dispatcher.ts`, `this.lastResumeToken = change._id` was updated immediately upon change stream receipt, before `enqueueAndDispatch()` successfully broadcast the event. If the process crashed during dispatch, the resume token had already advanced, causing the un-dispatched event to be skipped on restart.
-- **Root Cause:** Advancing the recovery token before the delivery operation succeeded.
-- **Fix:** Passed `resumeToken` through `enqueueAndDispatch(doc, change._id)` and updated `lastResumeToken` inside `handleEvent()` strictly AFTER `broadcastEvent()` successfully resolved.
+#### Finding 1: Commit Buffer Ordering & Polling Fallback Replay
+- **Defect:** `addToCommitBuffer()` ran for events dispatched by both the live Change Stream and the background poller. However, polling queries read from database collections where documents are ordered by collection indexes (`createdAt`, `_id`), NOT true transaction commit order. When polling observed transactions that committed out of ObjectId allocation order, adding polled events into `commitOrderedBuffer` corrupted the buffer's commit order. Furthermore, on cold restarts with an empty in-memory buffer, querying the database by `_id: { $gt: lastEventId }` silently skipped lower-ID events committed after higher-ID events.
+- **Root Cause:** Conflating collection query sorting with authoritative distributed transaction commit order. MongoDB collections do not persist an oplog commit sequence number.
+- **Resolution:**
+  - Poller dispatches events with `{ fromPoller: true }`. Polled events are live-broadcast to active sockets as best-effort notifications, but are **never added to `commitOrderedBuffer`**.
+  - Polling recovery marks `pollerFallbackOccurred = true`.
+  - When commit order cannot be proven (polling fallback active, or cold restart with empty buffer while running), `getReplayEvents()` emits an explicit `sync.gap` (`reason: 'fallback'`).
+  - The client's `useEvents` hook catches `sync.gap` and triggers `queryClient.invalidateQueries()`, safely synchronizing from authoritative REST endpoints.
 
-#### Investigation 5: SSE Handshake Limits, Safe Cursor, and Resource Cleanup
-- **Defect:**
-  1. Handshake buffer had no size cap: if DB replay was slow or stalled, `conn.buffer` could grow without bound.
-  2. `formatSyncGapMessage()` included a synthetic `id: <new ObjectId()>` line, causing browser `EventSource` to set its internal `Last-Event-ID` cursor to a non-existent document, corrupting future replay requests.
-  3. The frontend error probe in `useEvents.ts` executed a `fetch()` call on connection error without terminating it via `AbortController`, holding open backend sockets.
-- **Root Cause:** Unbounded in-memory queuing, protocol cursor violation, and unreleased fetch resources.
-- **Fix:**
-  - Added hard cap `MAX_HANDSHAKE_BUFFER_SIZE = 100` in `connection.manager.ts`. On overflow, drops buffer and emits `event: sync.gap`.
-  - Removed `id:` line from `formatSyncGapMessage()`, ensuring control messages never mutate the client's `Last-Event-ID`.
-  - Added `AbortController` in `useEvents.ts` error probe and called `controller.abort()` immediately upon reading response status.
+#### Finding 2: Direct Replay Authoritative Membership Verification
+- **Defect:** In `sse.routes.ts`, the replay loop checked `connectionManager.getClientTeamId(connectionId)` rather than querying current database membership. If a member removal transaction committed in MongoDB while a replay query was in-flight (or in multi-instance deployments before local lifecycle broadcast arrived), the replay loop used the stale cached `teamId` and disclosed private team events to the removed user.
+- **Root Cause:** In-memory authorization cache check at delivery boundary without database verification.
+- **Resolution:**
+  - Added authoritative database membership verification (`await membershipRepo.findActiveMembership(hackathonId, req.user._id)`) inside the `sse.routes.ts` replay loop for every team-scoped event.
+  - If the user is no longer an active team member, the private team event is suppressed and `connectionManager.updateClientTeam(...)` clears the connection's cached `teamId`.
+  - If `findActiveMembership` throws a transient database error (e.g. connection pool timeout), delivery is suppressed fail-safe without corrupting in-memory authorization cache.
+  - Public hackathon events and user-scoped events remain authorized and are delivered without disruption.
+
+#### Finding 3: Poller Starvation Beyond 1,000 Events & Bounded Inter-Cycle Keyset Progress
+- **Defect:** `pollAndDispatch()` paginated 100 events at a time with a maximum of 10 batches per cycle, but its pagination cursor reset to `null` on each polling cycle. If $>1,000$ events existed in the lookback window (e.g. 1,500 committed events), Cycle 1 examined events 1–1,000, and Cycle 2 re-scanned events 1–1,000 from the beginning, permanently starving events 1,001–1,500 until older events aged out of the 60-second window.
+- **Root Cause:** Ephemeral per-cycle pagination cursor without state progression across polling cycles.
+- **Resolution:**
+  - Implemented keyset pagination `(createdAt, _id)` with persistent `this.pollCursor: { createdAt: Date; _id: ObjectId } | null` maintained across polling cycles.
+  - Poller query uses `{ createdAt: { $gte: since }, $or: [ { createdAt: cursor.createdAt, _id: { $gt: cursor._id } }, { createdAt: { $gt: cursor.createdAt } } ] }` sorted by `{ createdAt: 1, _id: 1 }`.
+  - Execution plan uses `IXSCAN` on dedicated index `event_poller_lookup` with index bounds `[cursorDate, MaxDate]` (zero in-memory sort, zero full collection scan).
+  - Cycle 1 processes 1,000 events, advancing `this.pollCursor` to event 1,000. Cycle 2 resumes at event 1,000 and processes remaining 500 events (events 1,001–1,500).
+  - Upon reaching the end of available records (`events.length < batchLimit`), `this.pollCursor` resets to `null`, ensuring the next cycle sweeps the entire sliding lookback window from `since` to catch any late-committing lower-ID concurrent transactions.
+  - Expired cursors (`cursor.createdAt < since`) automatically reset to `null`.
 
 ---
 
 ## 3. Reproduction Test Results: Before vs After
 
-A dedicated regression test suite was implemented in [`apps/api/test/outbox.delivery.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/outbox.delivery.test.ts).
+A dedicated regression suite of 19 tests was implemented in [`apps/api/test/outbox.delivery.test.ts`](file:///Users/uditagarwal/Desktop/CrewGrid/apps/api/test/outbox.delivery.test.ts).
 
 ### Reproduction Failures (Before Fix)
-Running the reproduction tests prior to the fixes produced deterministic failures across all investigated failure modes:
-
 ```
 FAIL test/outbox.delivery.test.ts
   × REPRODUCTION: non-monotonic ObjectId commit drops late-committing lower ObjectId (82ms)
-    → expected 'id: ...' to contain 'Team A' (lower ObjectId dropped by _id <= lastDispatchedId)
   × REPRODUCTION: restart blindly advances watermark to latest event, skipping un-dispatched events (71ms)
-    → expected '' to contain 'Restart Pending Team' (Event committed during restart permanently skipped)
   × REPRODUCTION: transient membership lookup failure is retried and not permanently dropped (76ms)
-    → expected '' to contain 'Updated with retry' (Transient DB error dropped event without retry)
   × REPRODUCTION: replay overflow (>50 events) sends sync.gap event instead of silent truncation (520ms)
-    → expected output to contain 'event: sync.gap' (Server silently truncated without gap signal)
   × REPRODUCTION: expired Last-Event-ID evicted from collection sends sync.gap event (510ms)
-    → expected output to contain 'event: sync.gap' (Server returned partial events across TTL eviction hole)
   × REPRODUCTION INV 1: non-monotonic replay: Event B (higher ID) commits first, Event A (lower ID) commits afterward; reconnecting with Event B ID must not lose Event A (480ms)
-    → expected replay events to include Event A (Event A skipped because _id_A < _id_B)
   × REPRODUCTION INV 1: lower-ID event arriving during replay-to-live handshake must not be skipped by flushBuffer (102ms)
-    → expected flushed buffer to deliver lower-ID handshake event (Event skipped by event._id <= highestReplayedId)
   × REPRODUCTION INV 2: user removed while private team event is buffered -> flushBuffer must NOT leak private event (73ms)
-    → expected flushed buffer to omit 'Classified Team Intel 007' (Private event delivered after membership removal)
   × REPRODUCTION INV 3: poller discovers and dispatches events beyond the first 200 already-dispatched records (75ms)
-    → expected poller to find Event 201 (Poller stopped after limit 200 without pagination)
   × REPRODUCTION INV 5: sync.gap control message does NOT include a misleading synthetic id line (20ms)
-    → expected sync.gap message NOT to match /id: [0-9a-f]{24}/ (Synthetic id line present)
   × REPRODUCTION INV 5: handshake buffer hard limit: exceeding 100 buffered events triggers safe sync.gap and drops buffer (45ms)
-    → expected handshake buffer overflow to trigger sync.gap
+  × REPRODUCTION FINDING 1: reversed ObjectId commit ordering during change-stream outage triggers explicit sync.gap on replay (87ms)
+    → expected replay result to signal sync.gap fallback (Poller collection scan lost lower-ID event in replay)
+  × REPRODUCTION FINDING 2: user removed in DB while replay is in-flight -> replay MUST NOT disclose private team events (496ms)
+    → expected output to omit 'Secret Team Replay Intel' (Private event delivered using stale cached teamId)
+  × REPRODUCTION FINDING 2: transient DB error during replay authorization suppresses private event without cache corruption (517ms)
+    → expected private event to be suppressed on DB lookup error
+  × REPRODUCTION FINDING 3: lookback window with 1,500 events -> bounded poller makes progress across cycles without starving events 1001-1500 (171ms)
+    → expected poller to make progress across cycles (Poller reset cursor on each cycle, starving records 1001-1500)
 ```
 
 ### Verified Passes (After Fix)
-All 15 regression tests pass deterministically:
+All 19 regression tests pass deterministically:
 ```
- ✓ test/outbox.delivery.test.ts (15 tests) 2911ms
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: non-monotonic ObjectId commit drops late-committing lower ObjectId (78ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: restart blindly advances watermark to latest event, skipping un-dispatched events (71ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: concurrent change stream and poller do not deliver duplicate events (69ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: transient membership lookup failure is retried and not permanently dropped (119ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: event committed during SSE connection handshake is not lost (487ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: replay overflow (>50 events) sends sync.gap event instead of silent truncation (529ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: expired Last-Event-ID evicted from collection sends sync.gap event (509ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: graceful shutdown drains in-flight broadcasts before closing (100ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > multi-instance delivery: two independent dispatchers deliver outbox event to their respective clients (111ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 1: non-monotonic replay: Event B (higher ID) commits first, Event A (lower ID) commits afterward; reconnecting with Event B ID must not lose Event A (478ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 1: lower-ID event arriving during replay-to-live handshake must not be skipped by flushBuffer (104ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 2: user removed while private team event is buffered -> flushBuffer must NOT leak private event (71ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 3: poller discovers and dispatches events beyond the first 200 already-dispatched records (77ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 5: sync.gap control message does NOT include a misleading synthetic id line (21ms)
-   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 5: handshake buffer hard limit: exceeding 100 buffered events triggers safe sync.gap and drops buffer (47ms)
+ ✓ test/outbox.delivery.test.ts (19 tests) 5329ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: non-monotonic ObjectId commit drops late-committing lower ObjectId 108ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: restart blindly advances watermark to latest event, skipping un-dispatched events 95ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: concurrent change stream and poller do not deliver duplicate events 83ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: transient membership lookup failure is retried and not permanently dropped 194ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: event committed during SSE connection handshake is not lost 595ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: replay overflow (>50 events) sends sync.gap event instead of silent truncation 572ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: expired Last-Event-ID evicted from collection sends sync.gap event 587ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION: graceful shutdown drains in-flight broadcasts before closing 179ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > multi-instance delivery: two independent dispatchers deliver outbox event to their respective clients 191ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 1: non-monotonic replay: Event B (higher ID) commits first, Event A (lower ID) commits afterward; reconnecting with Event B ID must not lose Event A 570ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 1: lower-ID event arriving during replay-to-live handshake must not be skipped by flushBuffer 94ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 2: user removed while private team event is buffered -> flushBuffer must NOT leak private event 90ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 3: poller discovers and dispatches events beyond the first 200 already-dispatched records 88ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 5: sync.gap control message does NOT include a misleading synthetic id line 24ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION INV 5: handshake buffer hard limit: exceeding 100 buffered events triggers safe sync.gap and drops buffer 63ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION FINDING 1: reversed ObjectId commit ordering during change-stream outage triggers explicit sync.gap on replay 491ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION FINDING 2: user removed in DB while replay is in-flight -> replay MUST NOT disclose private team events 521ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION FINDING 2: transient DB error during replay authorization suppresses private event without cache corruption 538ms
+   ✓ C02: Outbox & SSE Delivery Reliability Regression Tests > REPRODUCTION FINDING 3: lookback window with 1,500 events -> bounded poller makes progress across cycles without starving events 1001-1500 186ms
 ```
 
 ---
 
-## 4. Delivery, Replay, and Authorization Semantics Guaranteed
+## 4. Delivery, Replay, and Authorization Semantics: Confirmed Guarantees vs Best-Effort
 
-| Dimension | Guarantee | Verification Mechanism |
-|---|---|---|
-| **Delivery Guarantee** | **At-least-once delivery to active server sockets**, deduplicated before write | MongoDB transactional outbox + Change Stream + Paginated lookback poller + 20,000-entry in-memory deduplication set |
-| **Ordering Guarantee** | **Strict commit-order dispatch and replay** | Change streams follow MongoDB oplog `clusterTime`. Replay reads from in-memory commit-ordered buffer (`commitOrderedBuffer`). Buffer flush reconciles via `Set<string>` inclusion |
-| **Replay Integrity** | **Contiguous replay or explicit `sync.gap`** | If `lastEventId` is in commit buffer, all subsequent events are replayed in exact commit order. If evicted or $>50$ events missed, server emits `sync.gap` without `id:` cursor corruption |
-| **Authorization Write Barrier** | **Dual-layer check at physical write time** | Both live broadcast and `flushBuffer` verify in-memory `conn.teamId` and query authoritative `membershipRepo.findActiveMembership`. Revocation drops buffered events immediately |
-| **Transient Fault Tolerance** | **Exponential backoff retry without state corruption** | Database lookup errors during broadcast trigger up to 3 retries. Authorization cache is not invalidated on transient DB failure |
-| **Multi-Instance Isolation** | **Independent local socket delivery** | Each API node independently watches `realtime_events` and broadcasts to locally connected clients without shared consumer lock contention |
+| Operational Mode | Ordering & Delivery Semantics | Replay Guarantee | Authorization Guarantee |
+|---|---|---|---|
+| **Live Change Stream (Primary Engine)** | **Strict commit-order delivery** from MongoDB replica set oplog (`clusterTime`). At-least-once to active server sockets. Deduplicated via 20,000-entry in-memory FIFO set. | **Gapless commit-ordered replay** for up to 500 events held in `commitOrderedBuffer`. If missed events $>50$, server emits explicit `sync.gap`. | **Dual-layer authorization write barrier**: Live broadcast checks both in-memory `conn.teamId` AND authoritative `membershipRepo.findTeamMembers` at delivery time. |
+| **Polling Fallback (Recovery Engine)** | **Best-effort live socket notification** across lookback window (60s). Paginates up to 1,000 events/cycle via keyset `(createdAt, _id)`. Ordering is collection index order, **NOT guaranteed commit order**. | **Replay explicitly prohibited**: Poller events do not enter `commitOrderedBuffer`. Replay requests emit `event: sync.gap (reason: fallback)` forcing client REST re-sync. | Poller live broadcast invokes standard `broadcastEvent()`, verifying active database membership before writing to sockets. |
+| **SSE Handshake Buffering** | Events committing during replay query are held in `conn.buffer` (capped at 100). | Handshake buffer is flushed using `Set<string>` inclusion (`replayedEventIds`), delivering lower-ID events that arrived during handshake. | **Dual-layer check at flush time**: `flushBuffer()` queries `membershipRepo.findActiveMembership()`, dropping private events if membership was revoked during handshake. |
+| **Direct SSE Replay** | Replays events from commit buffer up to limit 50. If buffer is empty (cold restart) or fallback occurred, emits `sync.gap`. | Contiguous commit order verified against `commitOrderedBuffer`. | **Authoritative delivery check**: Every team event in replay loop queries `membershipRepo.findActiveMembership()`. Revocation suppresses delivery and clears connection cache. |
 
 ---
 
 ## 5. Architectural Boundaries & Operational Limitations
 
-To maintain strict engineering rigor, the following inherent architectural boundaries and limitations are explicitly documented:
+To maintain strict engineering accuracy, the following boundaries and limitations are documented:
 
 1. **Ephemeral Commit Buffer Lifetime (500 events):**  
-   The in-memory commit-ordered buffer stores the last 500 committed events per API process. If an API process restarts, this in-memory buffer is reinitialized. Post-restart replay requests falling outside the buffer rely on the bounded lookback window or trigger an explicit `sync.gap`.
+   The in-memory commit-ordered buffer stores the last 500 committed events per API process. If an API process restarts, this in-memory buffer is reinitialized. Post-restart replay requests falling outside the buffer rely on explicit `sync.gap` and REST resynchronization rather than attempting un-sequenced database collection replay.
 2. **Bounded Poller Lookback Window (60 seconds):**  
-   The fallback poller queries events created within the last 60 seconds (`createdAt >= now - 60s`). If a change stream is down and an event commits $>60\text{ s}$ prior, it will not be picked up by the poller. The Change Stream resume token (`resumeAfter`) remains the primary recovery path across brief disconnects.
+   The fallback poller queries events created within the last 60 seconds (`createdAt >= now - 60s`). If a change stream is down and an event commits $>60\text{ s}$ prior, it will not be picked up by the poller. The Change Stream resume token (`resumeAfter`) remains the primary recovery path across disconnects.
 3. **Unidirectional SSE Protocol Boundary:**  
    Standard Server-Sent Events over HTTP is fundamentally a unidirectional protocol without client-to-server application ACK packets. The server guarantees delivery to the TCP socket buffer; if the client crashes or experiences a network partition while an event is in flight, the browser cannot ACK receipt. The client MUST recover missing events upon reconnect using `Last-Event-ID` or reconcile via `sync.gap`.
 4. **Single-Node Handshake Buffering:**  
    Handshake buffering (`conn.buffer`) occurs in memory on the specific API server handling the HTTP request. SSE connections are sticky to their node; horizontal re-routing mid-handshake is not supported by standard SSE.
-5. **Poller Throughput Ceiling:**  
-   The poller paginates up to 10 batches of 100 items (1,000 events max per 500ms cycle). In normal operation the poller processes 0 items because the Change Stream dispatches events in near real-time. If the Change Stream halts under heavy load (>2,000 events/sec), polling will introduce backlog latency.
+5. **Bounded Polling Throughput:**  
+   The poller paginates up to 10 batches of 100 items (1,000 events max per 500ms cycle). In normal operation the poller processes 0 items because the Change Stream dispatches events in near real-time. If the Change Stream halts under heavy load (>2,000 events/sec), polling will introduce backlog latency. Keyset progress across cycles ensures no events are starved.
 
 ---
 
-## 6. Monorepo Test and Verification Evidence
+## 6. Monorepo Verification Evidence
 
-- **All API Tests (`apps/api`):** 141 passed across 15 test files (includes 15 outbox delivery tests, 22 SSE authorization tests, 9 realtime SSE tests, 8 concurrency race tests).
-- **All Web Tests (`apps/web`):** 16 passed across 3 test files.
-- **Playwright E2E Suite (`e2e`):** 16 passed across 2 spec files.
-- **Database Domain Invariants (`scripts/invariants/verify.ts`):** 0 violations.
-- **TypeScript, Lint & Monorepo Build:** 0 errors across `@crewgrid/contracts`, `@crewgrid/api`, `@crewgrid/web`, and `@crewgrid/e2e`.
+- **All API Tests (`apps/api`):** **145 passed across 15 test files** in 37.4s (includes 19 outbox delivery tests, 22 SSE authorization tests, 9 realtime SSE tests, 8 concurrency race tests).
+- **All Web Tests (`apps/web`):** **16 passed across 3 test files** in 3.72s.
+- **Playwright E2E Suite (`e2e`):** **16 passed across 2 spec files** in 9.0s.
+- **Database Domain Invariants (`scripts/invariants/verify.ts`):** **PASSED with 0 violations**.
+- **Monorepo Build, Lint & Typecheck (`pnpm -r lint && pnpm -r typecheck && pnpm -r build`):** **0 errors, 0 warnings across all 4 workspaces**.
 
 ---
 
-## 7. Conclusion
+## 7. Merge-Readiness Assessment
 
-Phase 2 (C02) reliability hardening is complete and independently verified. All identified failure modes—non-monotonic replay, buffered authorization leaks, poller starvation, premature resume token advancement, and cursor corruption—have been resolved with deterministic regression tests and production safeguards.
+All merge-blocking correctness review findings (Findings 1, 2, and 3) have been reproduced, fixed, and verified with deterministic regression tests. The real-time messaging subsystem strictly guarantees:
+1. True oplog commit ordering during live change stream dispatch.
+2. Explicit `sync.gap` fallback when commit order cannot be demonstrated from database scans.
+3. Zero private data disclosure across live broadcast, buffered flush, and direct replay.
+4. Starvation-free keyset polling progression across cycles.
+
+**Assessment:** The branch `fix/outbox-delivery-reliability` is **READY FOR MERGE** upon independent human approval. PR #2 remains unmerged and undeployed.

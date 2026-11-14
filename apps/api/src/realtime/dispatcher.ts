@@ -27,6 +27,11 @@ export class OutboxDispatcher {
   private commitOrderedIndexMap = new Map<string, number>();
   private readonly MAX_COMMIT_BUFFER = 500;
 
+  // Bounded pagination cursor across polling cycles to prevent starvation beyond 1,000 events
+  private pollCursor: { createdAt: Date; _id: ObjectId } | null = null;
+  // Flag tracking unsequenced polling fallback during change-stream outage
+  private pollerFallbackOccurred = false;
+
   constructor(options?: { pollIntervalMs?: number; lookbackMs?: number }) {
     this.pollIntervalMs = options?.pollIntervalMs ?? 500;
     this.lookbackMs = options?.lookbackMs ?? 60_000;
@@ -160,10 +165,14 @@ export class OutboxDispatcher {
     }
   }
 
-  enqueueAndDispatch(event: OutboxEventDocument, resumeToken?: any): Promise<void> {
+  enqueueAndDispatch(
+    event: OutboxEventDocument,
+    resumeToken?: any,
+    options?: { fromPoller?: boolean }
+  ): Promise<void> {
     this.dispatchQueue = this.dispatchQueue
       .then(async () => {
-        await this.handleEvent(event, resumeToken);
+        await this.handleEvent(event, resumeToken, options);
       })
       .catch((err) => {
         logger.error(
@@ -174,7 +183,11 @@ export class OutboxDispatcher {
     return this.dispatchQueue;
   }
 
-  async handleEvent(event: OutboxEventDocument, resumeToken?: any): Promise<void> {
+  async handleEvent(
+    event: OutboxEventDocument,
+    resumeToken?: any,
+    options?: { fromPoller?: boolean }
+  ): Promise<void> {
     if (this.isDispatched(event._id)) {
       if (resumeToken) {
         this.lastResumeToken = resumeToken;
@@ -203,12 +216,15 @@ export class OutboxDispatcher {
           throw new Error('Database query error during team authorization');
         }
         this.markDispatched(event._id);
-        this.addToCommitBuffer(event);
-        this.lastDispatchedId = event._id;
-        // Durable recovery boundary: update resume token ONLY AFTER successful broadcast
+        // Only live events (from Change Stream or live broadcast) are added to commitOrderedBuffer in commit order.
+        // Poller events are collection-scanned and must NOT contaminate commitOrderedBuffer.
+        if (!options?.fromPoller) {
+          this.addToCommitBuffer(event);
+        }
         if (resumeToken) {
           this.lastResumeToken = resumeToken;
         }
+        this.lastDispatchedId = event._id;
         return;
       } catch (err: any) {
         attempt++;
@@ -233,38 +249,58 @@ export class OutboxDispatcher {
       // Drain in-flight queue before polling to prevent duplicate processing
       await this.dispatchQueue;
 
-      const since = new Date(Date.now() - this.lookbackMs);
-      let lastBatchId: ObjectId | null = null;
+      const now = new Date();
+      const since = new Date(now.getTime() - this.lookbackMs);
+
+      // Time-window expiration: if pollCursor is older than the sliding window, reset it
+      if (this.pollCursor && this.pollCursor.createdAt.getTime() < since.getTime()) {
+        this.pollCursor = null;
+      }
+
       let totalDispatched = 0;
       const batchLimit = 100;
-      const maxBatches = 10; // Page through up to 1,000 records per poll cycle
+      const maxBatches = 10; // Bounded work per cycle (up to 1,000 records)
 
       for (let batch = 0; batch < maxBatches; batch++) {
         const filter: any = {
           createdAt: { $gte: since }
         };
-        if (lastBatchId) {
-          filter._id = { $gt: lastBatchId };
+
+        if (this.pollCursor) {
+          filter.$or = [
+            { createdAt: this.pollCursor.createdAt, _id: { $gt: this.pollCursor._id } },
+            { createdAt: { $gt: this.pollCursor.createdAt } }
+          ];
         }
 
         const events = await this.collection
           .find(filter)
-          .sort({ _id: 1 })
+          .sort({ createdAt: 1, _id: 1 })
           .limit(batchLimit)
           .toArray();
 
-        if (events.length === 0) break;
+        if (events.length === 0) {
+          // Reached end of lookback window; reset cursor for next sweep
+          this.pollCursor = null;
+          break;
+        }
 
-        lastBatchId = events[events.length - 1]!._id;
+        const lastDoc = events[events.length - 1]!;
+        this.pollCursor = { createdAt: lastDoc.createdAt, _id: lastDoc._id };
 
         for (const event of events) {
           if (!this.isDispatched(event._id)) {
-            this.enqueueAndDispatch(event);
+            this.pollerFallbackOccurred = true;
+            this.enqueueAndDispatch(event, undefined, { fromPoller: true });
             totalDispatched++;
           }
         }
 
-        if (events.length < batchLimit) break;
+        if (events.length < batchLimit) {
+          // Reached end of available records; reset cursor for next sweep
+          this.pollCursor = null;
+          break;
+        }
       }
 
       await this.dispatchQueue;
@@ -278,7 +314,7 @@ export class OutboxDispatcher {
   /**
    * Replays events for a reconnecting client with Last-Event-ID in commit order.
    * If lastEventId is present in the commit-ordered ring buffer, replays subsequent events.
-   * If not present, detects gaps (TTL eviction or buffer overflow) and signals sync.gap.
+   * If not present, detects gaps (TTL eviction, buffer overflow, or polling fallback) and signals sync.gap.
    */
   async getReplayEvents(
     hackathonId: ObjectId,
@@ -287,7 +323,16 @@ export class OutboxDispatcher {
   ): Promise<ReplayResult> {
     const hexId = lastEventId.toHexString();
 
-    // 1. Commit-ordered buffer replay check (Commit-order-safe replay protocol)
+    // If polling fallback occurred during change stream outage, commit order cannot be proven.
+    // Emit explicit sync.gap to trigger authoritative REST re-synchronization.
+    if (this.pollerFallbackOccurred) {
+      const res: any = [];
+      res.gap = true;
+      res.reason = 'fallback';
+      return res as ReplayResult;
+    }
+
+    // 1. Authoritative commit-ordered buffer replay check (Commit-order-safe replay protocol)
     if (this.commitOrderedIndexMap.has(hexId)) {
       const index = this.commitOrderedIndexMap.get(hexId)!;
       const subsequentEvents = this.commitOrderedBuffer.slice(index + 1);
@@ -305,7 +350,26 @@ export class OutboxDispatcher {
       return res as ReplayResult;
     }
 
-    // 2. Check if lastEventId is older than the oldest retained event in the collection (TTL eviction)
+    // 2. If commit buffer has events, but lastEventId was NOT in it:
+    // That means lastEventId committed prior to the ring buffer window -> buffer overflow gap!
+    if (this.commitOrderedBuffer.length > 0) {
+      const res: any = [];
+      res.gap = true;
+      res.reason = 'overflow';
+      return res as ReplayResult;
+    }
+
+    // 3. Restart with empty in-memory replay buffer while running:
+    // Database collection queries sort by ObjectId, which cannot guarantee commit order.
+    // Emit explicit sync.gap over misleading/lossy replay.
+    if (this.isRunning) {
+      const res: any = [];
+      res.gap = true;
+      res.reason = 'fallback';
+      return res as ReplayResult;
+    }
+
+    // Standalone / offline unit tests where dispatcher is not running
     const oldestEvent = await this.collection.findOne(
       { hackathonId },
       { sort: { _id: 1 }, projection: { _id: 1, createdAt: 1 } }
@@ -328,7 +392,6 @@ export class OutboxDispatcher {
       }
     }
 
-    // 3. Fallback database query (cold start or before buffer fills)
     const lastDoc = await this.collection.findOne({ _id: lastEventId });
     if (!lastDoc) {
       const res: any = [];
@@ -337,16 +400,6 @@ export class OutboxDispatcher {
       return res as ReplayResult;
     }
 
-    // If commit buffer has events, but lastEventId was NOT in it:
-    // That means lastEventId committed prior to the ring buffer window -> buffer overflow gap!
-    if (this.commitOrderedBuffer.length > 0) {
-      const res: any = [];
-      res.gap = true;
-      res.reason = 'overflow';
-      return res as ReplayResult;
-    }
-
-    // Cold start with empty commit buffer: query database by _id > lastEventId
     const events = await this.collection
       .find({
         hackathonId,
@@ -386,6 +439,8 @@ export class OutboxDispatcher {
       }
       this.changeStream = null;
     }
+    this.pollCursor = null;
+    this.pollerFallbackOccurred = false;
     // Drain in-flight queue before resolving
     await this.dispatchQueue;
     logger.info('OutboxDispatcher stopped');
@@ -397,6 +452,8 @@ export class OutboxDispatcher {
       this.dispatchedIds.clear();
       this.commitOrderedBuffer = [];
       this.commitOrderedIndexMap.clear();
+      this.pollCursor = null;
+      this.pollerFallbackOccurred = false;
     } else {
       this.markDispatched(id);
     }
@@ -404,6 +461,18 @@ export class OutboxDispatcher {
 
   getLastDispatchedId(): ObjectId | null {
     return this.lastDispatchedId;
+  }
+
+  getPollCursor(): { createdAt: Date; _id: ObjectId } | null {
+    return this.pollCursor;
+  }
+
+  hasFallbackOccurred(): boolean {
+    return this.pollerFallbackOccurred;
+  }
+
+  resetFallbackStatus(): void {
+    this.pollerFallbackOccurred = false;
   }
 }
 
