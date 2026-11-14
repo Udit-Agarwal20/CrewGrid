@@ -10,6 +10,7 @@ export class OutboxDispatcher {
   private changeStream: ChangeStream | null = null;
   private lastDispatchedId: ObjectId | null = null;
   private pollIntervalMs: number;
+  private dispatchQueue: Promise<void> = Promise.resolve();
 
   constructor(options?: { pollIntervalMs?: number }) {
     this.pollIntervalMs = options?.pollIntervalMs ?? 500;
@@ -60,10 +61,10 @@ export class OutboxDispatcher {
         fullDocument: 'updateLookup'
       });
 
-      this.changeStream.on('change', async (change: any) => {
+      this.changeStream.on('change', (change: any) => {
         if (change.operationType === 'insert' && change.fullDocument) {
           const doc = change.fullDocument as OutboxEventDocument;
-          await this.handleEvent(doc);
+          this.enqueueAndDispatch(doc);
         }
       });
 
@@ -75,16 +76,46 @@ export class OutboxDispatcher {
     }
   }
 
-  private async handleEvent(event: OutboxEventDocument): Promise<void> {
+  enqueueAndDispatch(event: OutboxEventDocument): Promise<void> {
+    this.dispatchQueue = this.dispatchQueue
+      .then(async () => {
+        await this.handleEvent(event);
+      })
+      .catch((err) => {
+        logger.error(
+          { err: err?.message, eventId: event._id.toHexString() },
+          'Error during serialized outbox event dispatch'
+        );
+      });
+    return this.dispatchQueue;
+  }
+
+  async handleEvent(event: OutboxEventDocument): Promise<void> {
     if (this.lastDispatchedId && event._id <= this.lastDispatchedId) {
       return; // Already processed
     }
+
+    // Multi-instance sync: update connectionManager authorizations on team member lifecycle events
+    if (event.scope === 'team' && event.teamId && event.payload) {
+      const payloadUserId = (event.payload as Record<string, unknown>)['userId'];
+      if (typeof payloadUserId === 'string' && ObjectId.isValid(payloadUserId)) {
+        if (event.eventType === 'member.left') {
+          connectionManager.updateClientTeam(new ObjectId(payloadUserId), event.hackathonId, null);
+        } else if (event.eventType === 'member.joined') {
+          connectionManager.updateClientTeam(new ObjectId(payloadUserId), event.hackathonId, event.teamId);
+        }
+      }
+    }
+
     this.lastDispatchedId = event._id;
     await connectionManager.broadcastEvent(event);
   }
 
   async pollAndDispatch(): Promise<number> {
     try {
+      // Drain in-flight queue before polling to prevent duplicate processing
+      await this.dispatchQueue;
+
       const filter: any = {};
       if (this.lastDispatchedId) {
         filter._id = { $gt: this.lastDispatchedId };
@@ -97,9 +128,10 @@ export class OutboxDispatcher {
         .toArray();
 
       for (const event of events) {
-        await this.handleEvent(event);
+        this.enqueueAndDispatch(event);
       }
 
+      await this.dispatchQueue;
       return events.length;
     } catch (err: any) {
       logger.error({ err: err.message }, 'Error during outbox poll and dispatch');

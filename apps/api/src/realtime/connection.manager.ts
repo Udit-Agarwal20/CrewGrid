@@ -88,6 +88,26 @@ export class ConnectionManager {
     this.updateClientTeam(userId, hackathonId, null);
   }
 
+  closeConnectionsForUser(userId: ObjectId): void {
+    const toRemove: string[] = [];
+    for (const [id, conn] of this.connections.entries()) {
+      if (conn.userId.equals(userId)) {
+        try {
+          conn.res.end();
+        } catch {
+          // ignore
+        }
+        toRemove.push(id);
+      }
+    }
+    for (const id of toRemove) {
+      this.connections.delete(id);
+    }
+    if (toRemove.length > 0) {
+      logger.debug({ userId: userId.toHexString(), closedCount: toRemove.length }, 'Closed SSE connections for user');
+    }
+  }
+
   getActiveConnectionsCount(): number {
     return this.connections.size;
   }
@@ -149,12 +169,12 @@ export class ConnectionManager {
       } else if (event.scope === 'team') {
         // Team event: authoritatively verify against active database membership
         if (event.teamId && activeMemberUserIds) {
-          const isMember = activeMemberUserIds.has(conn.userId.toHexString());
-          if (isMember) {
-            // Self-heal / update cached teamId if outdated
-            if (!conn.teamId || !conn.teamId.equals(event.teamId)) {
-              conn.teamId = event.teamId;
-            }
+          // Defense against TOCTOU race: both in-memory unrevoked state AND authoritative DB membership must hold at write time
+          const isLocallyAuthorized = conn.teamId !== null && conn.teamId.equals(event.teamId);
+          const isDbAuthorized = activeMemberUserIds.has(conn.userId.toHexString());
+          const isAuthorized = isLocallyAuthorized && isDbAuthorized;
+
+          if (isAuthorized) {
             this.writeToConnection(conn, message, deadConnections);
           } else {
             // Stale cache defense: if connection was previously cached for this team, revoke it

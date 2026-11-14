@@ -11,6 +11,7 @@ import {
 import { connectionManager } from '../src/realtime/connection.manager.js';
 import { outboxDispatcher } from '../src/realtime/dispatcher.js';
 import { outboxRepo, OutboxEventDocument } from '../src/realtime/outbox.repo.js';
+import { membershipRepo } from '../src/modules/membership/membership.repo.js';
 
 describe('C01: SSE Authorization Security & Freshness Tests', () => {
   const app = createApp();
@@ -423,5 +424,233 @@ describe('C01: SSE Authorization Security & Freshness Tests', () => {
 
     // Post leave secret must NEVER appear
     expect(mockRes.getOutput()).not.toContain('Post-Leave Secret Leaked?');
+  });
+
+  // ==========================================================================
+  // Investigation 1: Deterministic TOCTOU race barrier test
+  // ==========================================================================
+  it('Investigation 1: TOCTOU race barrier test - removal transaction committing during in-flight lookup prevents delivery', async () => {
+    const { hackathon, teamId, leaderCookie, leaderCsrf, member } = await setupTeamWithMember();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, mockRes);
+
+    const privateEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'request.created',
+      payload: { secret: 'Ultra-Sensitive TOCTOU Secret' }
+    });
+
+    // Deterministic barrier hooks
+    let lookupStarted = false;
+    let resumeLookup: () => void = () => {};
+    const resumePromise = new Promise<void>((resolve) => {
+      resumeLookup = resolve;
+    });
+
+    const origFindTeamMembers = membershipRepo.findTeamMembers.bind(membershipRepo);
+    let barrierActive = true;
+
+    // Spy on findTeamMembers to freeze execution right after fetching pre-removal members
+    membershipRepo.findTeamMembers = async (tId, session) => {
+      const result = await origFindTeamMembers(tId, session);
+      if (barrierActive && tId.equals(teamId)) {
+        lookupStarted = true;
+        // Pause here: the pre-removal snapshot has been obtained
+        await resumePromise;
+      }
+      return result;
+    };
+
+    try {
+      // Step 1 & 2: Dispatcher begins authoritative lookup in background
+      const broadcastPromise = connectionManager.broadcastEvent(privateEvent);
+
+      // Wait until lookup has started and paused at barrier
+      while (!lookupStarted) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      // Step 3: Removal transaction executes and commits while lookup is paused
+      const removeRes = await request(app)
+        .delete(`/api/v1/teams/${teamId.toHexString()}/members/${member._id.toHexString()}`)
+        .set('Cookie', leaderCookie)
+        .set('X-CSRF-Token', leaderCsrf);
+      expect(removeRes.status).toBe(204);
+
+      // Verify that removal updated connectionManager state
+      barrierActive = false;
+      // Step 4: Dispatcher resumes with the pre-removal DB snapshot
+      resumeLookup();
+      await broadcastPromise;
+
+      // Verification: Under our TOCTOU defense, even though DB lookup had returned the user,
+      // the in-memory revocation check at write time detects conn.teamId is null,
+      // so the private event must NOT be delivered!
+      expect(mockRes.getOutput()).not.toContain('Ultra-Sensitive TOCTOU Secret');
+      expect(mockRes.getOutput()).not.toContain('event: request.created');
+    } finally {
+      membershipRepo.findTeamMembers = origFindTeamMembers;
+    }
+  });
+
+  // ==========================================================================
+  // Investigation 2: Serialized change-stream ordering & delayed dispatch
+  // ==========================================================================
+  it('Investigation 2: Serialized dispatch guarantees in-order event delivery even when earlier event lookup is delayed', async () => {
+    const { hackathon, teamId, member } = await setupTeamWithMember();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, mockRes);
+
+    const event1 = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'member.joined',
+      payload: { index: 1, text: 'EVENT_1_FIRST' }
+    });
+
+    const event2 = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'member.joined',
+      payload: { index: 2, text: 'EVENT_2_SECOND' }
+    });
+
+    // Delay event1 lookup
+    const origFindTeamMembers = membershipRepo.findTeamMembers.bind(membershipRepo);
+    let delayedEvent1 = true;
+
+    membershipRepo.findTeamMembers = async (tId, session) => {
+      if (delayedEvent1) {
+        delayedEvent1 = false;
+        // Introduce deliberate delay for Event 1
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      return origFindTeamMembers(tId, session);
+    };
+
+    try {
+      // Dispatch both through dispatcher's serialized queue
+      const p1 = outboxDispatcher.enqueueAndDispatch(event1);
+      const p2 = outboxDispatcher.enqueueAndDispatch(event2);
+      await Promise.all([p1, p2]);
+
+      const output = mockRes.getOutput();
+      expect(output).toContain('EVENT_1_FIRST');
+      expect(output).toContain('EVENT_2_SECOND');
+
+      const pos1 = output.indexOf('EVENT_1_FIRST');
+      const pos2 = output.indexOf('EVENT_2_SECOND');
+
+      // Strict FIFO order check
+      expect(pos1).toBeLessThan(pos2);
+    } finally {
+      membershipRepo.findTeamMembers = origFindTeamMembers;
+    }
+  });
+
+  // ==========================================================================
+  // Investigation 3: Failure behavior & Session Revocation
+  // ==========================================================================
+  it('Investigation 3: Database query error during team authorization drops event fail-safe without leaking private data', async () => {
+    const { hackathon, teamId, member } = await setupTeamWithMember();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(member._id, hackathon._id, teamId, mockRes);
+
+    const privateEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'request.created',
+      payload: { secret: 'Failsafe Secret Under DB Crash' }
+    });
+
+    // Simulate transient database failure during lookup
+    const origFindTeamMembers = membershipRepo.findTeamMembers.bind(membershipRepo);
+    membershipRepo.findTeamMembers = async () => {
+      throw new Error('SIMULATED_DB_NETWORK_TIMEOUT');
+    };
+
+    try {
+      // Should not throw unhandled exception
+      await connectionManager.broadcastEvent(privateEvent);
+
+      // Fail-safe: nothing should be delivered
+      expect(mockRes.getOutput()).not.toContain('Failsafe Secret Under DB Crash');
+      expect(mockRes.getOutput()).toBe('');
+    } finally {
+      membershipRepo.findTeamMembers = origFindTeamMembers;
+    }
+  });
+
+  it('Investigation 3: Session logout terminates active SSE socket and revokes session', async () => {
+    const user = await createTestUser();
+    const { sessionCookie, csrfToken } = await createTestSession(user._id);
+    const hackathon = await createTestHackathon();
+
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(user._id, hackathon._id, null, mockRes);
+
+    expect(connectionManager.getActiveConnectionsCount()).toBe(1);
+
+    // Call logout endpoint
+    const logoutRes = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', sessionCookie)
+      .set('X-CSRF-Token', csrfToken);
+
+    expect(logoutRes.status).toBe(204);
+
+    // Socket must be closed and removed from connectionManager
+    expect(mockRes.isClosed()).toBe(true);
+    expect(connectionManager.getActiveConnectionsCount()).toBe(0);
+
+    // Reconnection attempt with same session must fail 401
+    const reconnectRes = await request(app)
+      .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/events`)
+      .set('Cookie', sessionCookie);
+
+    expect(reconnectRes.status).toBe(401);
+    expect(reconnectRes.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('Investigation 3: Multiple connections for same user across tabs are updated and revoked consistently', async () => {
+    const { hackathon, teamId, leaderCookie, leaderCsrf, member } = await setupTeamWithMember();
+
+    // Member has 3 open tabs
+    const tab1 = createMockSseResponse();
+    const tab2 = createMockSseResponse();
+    const tab3 = createMockSseResponse();
+
+    connectionManager.addConnection(member._id, hackathon._id, teamId, tab1);
+    connectionManager.addConnection(member._id, hackathon._id, teamId, tab2);
+    connectionManager.addConnection(member._id, hackathon._id, teamId, tab3);
+
+    // Leader removes member
+    await request(app)
+      .delete(`/api/v1/teams/${teamId.toHexString()}/members/${member._id.toHexString()}`)
+      .set('Cookie', leaderCookie)
+      .set('X-CSRF-Token', leaderCsrf);
+
+    const postRemovalEvent = await outboxRepo.insertEvent({
+      hackathonId: hackathon._id,
+      teamId,
+      scope: 'team',
+      eventType: 'request.created',
+      payload: { secret: 'Multi-Tab Secret' }
+    });
+
+    await connectionManager.broadcastEvent(postRemovalEvent);
+
+    // None of the 3 tabs should receive the secret
+    expect(tab1.getOutput()).not.toContain('Multi-Tab Secret');
+    expect(tab2.getOutput()).not.toContain('Multi-Tab Secret');
+    expect(tab3.getOutput()).not.toContain('Multi-Tab Secret');
   });
 });

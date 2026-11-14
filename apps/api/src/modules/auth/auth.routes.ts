@@ -5,6 +5,7 @@ import { requireAuth } from '../../middleware/session.js';
 import { createRateLimiter } from '../../middleware/rate-limit.js';
 import { RegisterRequestSchema, LoginRequestSchema, SuccessEnvelope } from '@crewgrid/contracts';
 import { env } from '../../config/env.js';
+import { connectionManager } from '../../realtime/connection.manager.js';
 
 export function createAuthRouter(authService: AuthService = new AuthService()): Router {
   const router = Router();
@@ -61,6 +62,9 @@ export function createAuthRouter(authService: AuthService = new AuthService()): 
       try {
         const rawToken = req.cookies?.[env.SESSION_COOKIE_NAME];
         await authService.logout(rawToken, res);
+        if (req.user) {
+          connectionManager.closeConnectionsForUser(req.user._id);
+        }
         res.status(204).end();
       } catch (err) {
         next(err);
