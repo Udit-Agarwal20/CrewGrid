@@ -17,6 +17,8 @@ export interface SseClientConnection {
   buffer?: OutboxEventDocument[];
 }
 
+export const MAX_HANDSHAKE_BUFFER_SIZE = 100;
+
 export class ConnectionManager {
   private connections = new Map<string, SseClientConnection>();
   private heartbeatInterval: NodeJS.Timeout | null = null;
@@ -66,7 +68,12 @@ export class ConnectionManager {
     return connectionId;
   }
 
-  flushBuffer(connectionId: string, highestReplayedId: ObjectId | null): void {
+  getClientTeamId(connectionId: string): ObjectId | null {
+    const conn = this.connections.get(connectionId);
+    return conn ? conn.teamId : null;
+  }
+
+  async flushBuffer(connectionId: string, replayedEventIds?: Set<string> | ObjectId | null): Promise<void> {
     const conn = this.connections.get(connectionId);
     if (!conn || !conn.buffering) return;
 
@@ -75,15 +82,51 @@ export class ConnectionManager {
     conn.buffer = undefined;
 
     const deadConnections: string[] = [];
-    // Sort buffered events by _id ascending
-    bufferedEvents.sort((a, b) => a._id.toHexString().localeCompare(b._id.toHexString()));
+
+    // Check if event was already delivered during replay
+    let isReplayed: (id: ObjectId) => boolean;
+    if (replayedEventIds instanceof Set) {
+      isReplayed = (id: ObjectId) => replayedEventIds.has(id.toHexString());
+    } else if (replayedEventIds instanceof ObjectId) {
+      isReplayed = (id: ObjectId) => id.toHexString() <= replayedEventIds.toHexString();
+    } else {
+      isReplayed = () => false;
+    }
 
     for (const event of bufferedEvents) {
-      if (highestReplayedId && event._id <= highestReplayedId) {
+      if (isReplayed(event._id)) {
         continue;
       }
-      const message = this.formatSseMessage(event);
-      this.writeToConnection(conn, message, deadConnections);
+
+      // Re-verify authorization at socket delivery boundary (Investigation 2 fix)
+      let isAuthorized = false;
+      if (event.scope === 'public-hackathon') {
+        isAuthorized = true;
+      } else if (event.scope === 'team') {
+        if (event.teamId && conn.teamId && conn.teamId.equals(event.teamId)) {
+          try {
+            const active = await membershipRepo.findActiveMembership(conn.hackathonId, conn.userId);
+            if (active && active.teamId.equals(event.teamId)) {
+              isAuthorized = true;
+            } else {
+              // Stale cache defense: clear revoked team authorization
+              conn.teamId = null;
+            }
+          } catch {
+            // Fail safe on transient DB failure
+            isAuthorized = false;
+          }
+        }
+      } else if (event.scope === 'user') {
+        if (event.userId && conn.userId.equals(event.userId)) {
+          isAuthorized = true;
+        }
+      }
+
+      if (isAuthorized) {
+        const message = this.formatSseMessage(event);
+        this.writeToConnection(conn, message, deadConnections);
+      }
     }
 
     for (const deadId of deadConnections) {
@@ -217,8 +260,8 @@ export class ConnectionManager {
       gap: true,
       reason
     });
-    const gapId = new ObjectId().toHexString();
-    return `id: ${gapId}\nevent: sync.gap\ndata: ${data}\n\n`;
+    // Omit synthetic id line to prevent corrupting the client's Last-Event-ID replay cursor
+    return `event: sync.gap\ndata: ${data}\n\n`;
   }
 
   async broadcastEvent(event: OutboxEventDocument): Promise<{ authError?: boolean }> {
@@ -293,6 +336,24 @@ export class ConnectionManager {
     if (conn.buffering) {
       if (!conn.buffer) {
         conn.buffer = [];
+      }
+      // Hard buffer limit: if handshake buffer exceeds limit, trigger safe sync.gap and clear buffer
+      if (conn.buffer.length >= MAX_HANDSHAKE_BUFFER_SIZE) {
+        logger.warn(
+          { connectionId: conn.connectionId, bufferLength: conn.buffer.length },
+          'Handshake buffer overflow: forcing sync.gap'
+        );
+        conn.buffer = [];
+        conn.buffering = false;
+        try {
+          conn.res.write(this.formatSyncGapMessage(conn.hackathonId, 'overflow'));
+          if (typeof (conn.res as any).flush === 'function') {
+            (conn.res as any).flush();
+          }
+        } catch {
+          deadConnections.push(conn.connectionId);
+        }
+        return;
       }
       conn.buffer.push(event);
       return;

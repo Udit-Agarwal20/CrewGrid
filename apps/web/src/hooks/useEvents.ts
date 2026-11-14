@@ -139,13 +139,16 @@ export function useEvents(hackathonId: string | undefined) {
 
         // Check if error was a non-retryable 4xx client response (401, 403, 404, 422)
         try {
-          const probe = await fetch(url, { method: 'GET', credentials: 'include' });
-          if (probe.status >= 400 && probe.status < 500) {
+          const controller = new AbortController();
+          const probe = await fetch(url, { method: 'GET', credentials: 'include', signal: controller.signal });
+          const probeStatus = probe.status;
+          controller.abort(); // Immediately release response stream and backend socket
+          if (probeStatus >= 400 && probeStatus < 500) {
             // Non-retryable HTTP 4xx error. Terminate reconnect attempts.
             return;
           }
         } catch {
-          // Network offline / connection drop, retryable
+          // Network offline / connection drop / abort, retryable
         }
 
         // Check if maximum reconnect attempts reached

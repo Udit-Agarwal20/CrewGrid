@@ -166,6 +166,11 @@ export async function initializeIndexes(db: Db): Promise<void> {
   );
   await ensureIndex(
     db.collection('realtime_events'),
+    { createdAt: 1, _id: 1 },
+    { name: 'event_poller_lookup' }
+  );
+  await ensureIndex(
+    db.collection('realtime_events'),
     { expiresAt: 1 },
     { expireAfterSeconds: 0, name: 'event_ttl' }
   );

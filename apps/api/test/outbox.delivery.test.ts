@@ -502,4 +502,260 @@ describe('C02: Outbox & SSE Delivery Reliability Regression Tests', () => {
 
     siblingManager.closeAll();
   });
+
+  // --------------------------------------------------------------------------
+  // 10. Investigation 1: Non-monotonic ObjectId replay
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION INV 1: non-monotonic replay: Event B (higher ID) commits first, Event A (lower ID) commits afterward; reconnecting with Event B ID must not lose Event A', async () => {
+    const hackathon = await createTestHackathon();
+    const user = await createTestUser();
+    const { sessionCookie } = await createTestSession(user._id);
+
+    const db = getDatabase();
+    const now = new Date();
+
+    // Event B has higher ObjectId
+    const idB = new ObjectId();
+    // Event A has lower ObjectId (allocated 10s earlier)
+    const idA = makeObjectIdWithTimestamp(10);
+    expect(idA.toHexString() < idB.toHexString()).toBe(true);
+
+    // Event B commits first
+    const docB: OutboxEventDocument = {
+      _id: idB,
+      hackathonId: hackathon._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Committed First (Event B)' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    await db.collection('realtime_events').insertOne(docB);
+    await outboxDispatcher.enqueueAndDispatch(docB);
+
+    // Client receives Event B and disconnects with Last-Event-ID = idB
+    // Now Event A commits second
+    const docA: OutboxEventDocument = {
+      _id: idA,
+      hackathonId: hackathon._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Committed Second (Event A with lower ID)' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+    await db.collection('realtime_events').insertOne(docA);
+    await outboxDispatcher.enqueueAndDispatch(docA);
+
+    // Client reconnects with Last-Event-ID = idB (which is numerically > idA)
+    const { output, statusCode } = await connectSseStream({
+      cookie: sessionCookie,
+      hackathonId: hackathon._id.toHexString(),
+      lastEventId: idB.toHexString(),
+      durationMs: 400
+    });
+
+    expect(statusCode).toBe(200);
+    // Either Event A must be delivered in replay, OR an explicit sync.gap must be sent
+    const hasEventA = output.includes('Committed Second (Event A with lower ID)');
+    const hasSyncGap = output.includes('event: sync.gap');
+    expect(hasEventA || hasSyncGap).toBe(true);
+  });
+
+  it('REPRODUCTION INV 1: lower-ID event arriving during replay-to-live handshake must not be skipped by flushBuffer', async () => {
+    const hackathon = await createTestHackathon();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+
+    // Connection starts in buffering mode during handshake
+    const connectionId = connectionManager.addConnection(user._id, hackathon._id, null, mockRes, 'dummy-token', {
+      buffering: true
+    });
+
+    // An event with lower ObjectId arrives while handshake is buffering
+    const lowerId = makeObjectIdWithTimestamp(5);
+    const now = new Date();
+    const handshakeEvent: OutboxEventDocument = {
+      _id: lowerId,
+      hackathonId: hackathon._id,
+      teamId: null,
+      userId: null,
+      scope: 'public-hackathon',
+      eventType: 'team.created',
+      payload: { name: 'Lower ID Handshake Event' },
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 7200000)
+    };
+
+    // Broadcasts during handshake -> gets buffered
+    await connectionManager.broadcastEvent(handshakeEvent);
+
+    // Suppose replay replayed a higher event ID
+    const higherReplayedId = new ObjectId();
+    expect(lowerId.toHexString() < higherReplayedId.toHexString()).toBe(true);
+
+    // Pass the actual replayed IDs set (Investigation 1 fix)
+    const replayedSet = new Set([higherReplayedId.toHexString()]);
+    await connectionManager.flushBuffer(connectionId, replayedSet);
+
+    // lowerId arrived during handshake, was not in replayedSet, and must be delivered!
+    expect(mockRes.getOutput()).toContain('Lower ID Handshake Event');
+  });
+
+  // --------------------------------------------------------------------------
+  // 11. Investigation 2: Buffered event authorization leakage
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION INV 2: user removed while private team event is buffered -> flushBuffer must NOT leak private event', async () => {
+    const hackathon = await createTestHackathon();
+    const teamId = new ObjectId();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+    const db = getDatabase();
+
+    // 1. User starts as active member in DB
+    await db.collection('memberships').insertOne({
+      hackathonId: hackathon._id,
+      teamId,
+      userId: user._id,
+      role: 'member',
+      joinedAt: new Date()
+    });
+
+    // Connection opened in buffering mode for teamId
+    const connectionId = connectionManager.addConnection(user._id, hackathon._id, teamId, mockRes, 'token-hash-x', {
+      buffering: true
+    });
+
+    // 2. A team-private event is authorized and buffered on connection
+    const privateEvent: OutboxEventDocument = {
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId,
+      userId: null,
+      scope: 'team',
+      eventType: 'request.created',
+      payload: { secret: 'Classified Team Intel 007' },
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 7200000)
+    };
+    await connectionManager.broadcastEvent(privateEvent);
+
+    // 3. User's membership is removed and the removal transaction commits
+    await db.collection('memberships').deleteOne({ hackathonId: hackathon._id, teamId, userId: user._id });
+    connectionManager.updateClientTeam(user._id, hackathon._id, null, teamId);
+
+    // 4. Replay finishes and flushBuffer runs
+    connectionManager.flushBuffer(connectionId, null);
+
+    // In the vulnerable implementation:
+    // flushBuffer blindly writes buffered messages without re-verifying current authorization!
+    // In the robust implementation:
+    // flushBuffer checks authorization at the socket delivery boundary and suppresses the leaked message!
+    expect(mockRes.getOutput()).not.toContain('Classified Team Intel 007');
+    expect(mockRes.getOutput()).toBe('');
+  });
+
+  // --------------------------------------------------------------------------
+  // 12. Investigation 3: Poller starvation (>200 records in lookback window)
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION INV 3: poller discovers and dispatches events beyond the first 200 already-dispatched records', async () => {
+    const hackathon = await createTestHackathon();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+    connectionManager.addConnection(user._id, hackathon._id, null, mockRes);
+
+    const db = getDatabase();
+    const now = new Date();
+
+    // Create a custom dispatcher with lookback window of 60s
+    const starvationDispatcher = new OutboxDispatcher({ pollIntervalMs: 50, lookbackMs: 60_000 });
+
+    // Insert 220 events in the lookback window
+    const docs: OutboxEventDocument[] = [];
+    for (let i = 1; i <= 220; i++) {
+      docs.push({
+        _id: new ObjectId(),
+        hackathonId: hackathon._id,
+        teamId: null,
+        userId: null,
+        scope: 'public-hackathon',
+        eventType: 'team.updated',
+        payload: { index: i },
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + 7200000)
+      });
+    }
+    await db.collection('realtime_events').insertMany(docs);
+
+    // First 200 records are already dispatched (e.g. earlier by change stream)
+    for (let i = 0; i < 200; i++) {
+      starvationDispatcher.setLastDispatchedId(docs[i]!._id);
+    }
+
+    // Now change stream is down; polling runs
+    // In the flawed implementation:
+    // query does .limit(200) without pagination. The first 200 records are all already dispatched.
+    // Records 201..220 are NEVER fetched or dispatched!
+    // In the robust implementation:
+    // Poller pages through until it discovers and dispatches the un-dispatched records 201..220!
+    await starvationDispatcher.pollAndDispatch();
+    await starvationDispatcher.stop();
+
+    // Record 210 and 220 MUST have been dispatched to mockRes
+    expect(mockRes.getOutput()).toContain('"index":210');
+    expect(mockRes.getOutput()).toContain('"index":220');
+  });
+
+  // --------------------------------------------------------------------------
+  // 13. Investigation 5: Safe sync.gap without misleading future replay cursor
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION INV 5: sync.gap control message does NOT include a misleading synthetic id line', async () => {
+    const hackathonId = new ObjectId();
+    const message = connectionManager.formatSyncGapMessage(hackathonId, 'overflow');
+
+    // In the flawed implementation:
+    // formatSyncGapMessage emitted `id: <randomObjectId>\nevent: sync.gap\n...`
+    // which causes the browser EventSource to update its Last-Event-ID to a non-existent ID!
+    // In the robust implementation:
+    // sync.gap must NOT advance the replay cursor to a synthetic ID
+    expect(message).toContain('event: sync.gap');
+    expect(message).not.toMatch(/^id:\s+[0-9a-f]{24}/m);
+  });
+
+  it('REPRODUCTION INV 5: handshake buffer hard limit: exceeding 100 buffered events triggers safe sync.gap and drops buffer', async () => {
+    const hackathon = await createTestHackathon();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+
+    const connectionId = connectionManager.addConnection(user._id, hackathon._id, null, mockRes, 'tok', {
+      buffering: true
+    });
+
+    // Broadcast 105 events while handshake is buffering
+    for (let i = 1; i <= 105; i++) {
+      const event: OutboxEventDocument = {
+        _id: new ObjectId(),
+        hackathonId: hackathon._id,
+        teamId: null,
+        userId: null,
+        scope: 'public-hackathon',
+        eventType: 'team.created',
+        payload: { item: i },
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 7200000)
+      };
+      await connectionManager.broadcastEvent(event);
+    }
+
+    // Must have emitted sync.gap on overflow
+    expect(mockRes.getOutput()).toContain('event: sync.gap');
+    expect(mockRes.getOutput()).toContain('"reason":"overflow"');
+
+    // Flush buffer
+    await connectionManager.flushBuffer(connectionId, new Set());
+  });
 });

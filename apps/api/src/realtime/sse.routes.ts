@@ -70,11 +70,10 @@ export function createSseRouter(): Router {
         });
 
         // Replay missed events if Last-Event-ID header or query param is provided
-        let highestReplayedId: ObjectId | null = null;
+        const replayedIds = new Set<string>();
         const lastIdHeader = req.header('last-event-id') || (req.query['lastEventId'] as string | undefined);
         if (lastIdHeader && ObjectId.isValid(lastIdHeader)) {
           const lastEventId = new ObjectId(lastIdHeader);
-          highestReplayedId = lastEventId;
 
           const replayResult = await outboxDispatcher.getReplayEvents(hackathonId, lastEventId, 50);
 
@@ -86,16 +85,20 @@ export function createSseRouter(): Router {
               let authorized = false;
               if (event.scope === 'public-hackathon') {
                 authorized = true;
-              } else if (event.scope === 'team' && teamId && event.teamId?.equals(teamId)) {
-                authorized = true;
+              } else if (event.scope === 'team') {
+                // Re-verify current live authorization at delivery boundary
+                const currentTeamId = connectionManager.getClientTeamId(connectionId);
+                if (currentTeamId && event.teamId?.equals(currentTeamId)) {
+                  authorized = true;
+                }
               } else if (event.scope === 'user' && event.userId?.equals(req.user!._id)) {
                 authorized = true;
               }
 
               if (authorized) {
                 res.write(connectionManager.formatSseMessage(event));
+                replayedIds.add(event._id.toHexString());
               }
-              highestReplayedId = event._id;
             }
           }
 
@@ -105,7 +108,7 @@ export function createSseRouter(): Router {
         }
 
         // Flush in-flight buffered broadcasts and transition connection to live broadcast
-        connectionManager.flushBuffer(connectionId, highestReplayedId);
+        await connectionManager.flushBuffer(connectionId, replayedIds);
       } catch (err) {
         next(err);
       }
