@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { ObjectId } from 'mongodb';
 import crypto from 'node:crypto';
 import { OutboxEventDocument } from './outbox.repo.js';
+import { membershipRepo } from '../modules/membership/membership.repo.js';
 import { logger } from '../observability/logger.js';
 
 export interface SseClientConnection {
@@ -10,6 +11,7 @@ export interface SseClientConnection {
   hackathonId: ObjectId;
   teamId: ObjectId | null;
   res: Response;
+  tokenHash?: string;
   connectedAt: Date;
 }
 
@@ -36,7 +38,8 @@ export class ConnectionManager {
     userId: ObjectId,
     hackathonId: ObjectId,
     teamId: ObjectId | null,
-    res: Response
+    res: Response,
+    tokenHash?: string
   ): string {
     const connectionId = crypto.randomUUID();
     const conn: SseClientConnection = {
@@ -45,6 +48,7 @@ export class ConnectionManager {
       hackathonId,
       teamId,
       res,
+      tokenHash,
       connectedAt: new Date()
     };
 
@@ -65,12 +69,88 @@ export class ConnectionManager {
     }
   }
 
-  updateClientTeam(userId: ObjectId, hackathonId: ObjectId, newTeamId: ObjectId | null): void {
+  updateClientTeam(
+    userId: ObjectId,
+    hackathonId: ObjectId | undefined,
+    newTeamId: ObjectId | null,
+    expectedCurrentTeamId?: ObjectId | null
+  ): void {
     for (const conn of this.connections.values()) {
-      if (conn.userId.equals(userId) && conn.hackathonId.equals(hackathonId)) {
-        conn.teamId = newTeamId;
+      if (conn.userId.equals(userId)) {
+        if (!hackathonId || conn.hackathonId.equals(hackathonId)) {
+          // If revoking (newTeamId === null) and expectedCurrentTeamId is specified,
+          // only clear if the connection's current teamId matches expectedCurrentTeamId.
+          if (newTeamId === null && expectedCurrentTeamId && conn.teamId && !conn.teamId.equals(expectedCurrentTeamId)) {
+            continue;
+          }
+          conn.teamId = newTeamId;
+        }
       }
     }
+    logger.debug(
+      {
+        userId: userId.toHexString(),
+        hackathonId: hackathonId ? hackathonId.toHexString() : 'all',
+        newTeamId: newTeamId ? newTeamId.toHexString() : null,
+        expectedCurrentTeamId: expectedCurrentTeamId ? expectedCurrentTeamId.toHexString() : null
+      },
+      'Updated client team authorization'
+    );
+  }
+
+  revokeTeamAuthorization(userId: ObjectId, hackathonId?: ObjectId): void {
+    this.updateClientTeam(userId, hackathonId, null);
+  }
+
+  /**
+   * Session-scoped SSE connection termination used during regular logout.
+   * Closes only connections opened under the specific session (e.g. tabs in that browser).
+   */
+  closeConnectionsForSession(tokenHash: string): number {
+    const toRemove: string[] = [];
+    for (const [id, conn] of this.connections.entries()) {
+      if (conn.tokenHash === tokenHash) {
+        try {
+          conn.res.end();
+        } catch {
+          // ignore
+        }
+        toRemove.push(id);
+      }
+    }
+    for (const id of toRemove) {
+      this.connections.delete(id);
+    }
+    if (toRemove.length > 0) {
+      logger.debug({ tokenHash, closedCount: toRemove.length }, 'Closed SSE connections for session');
+    }
+    return toRemove.length;
+  }
+
+  /**
+   * Account-wide SSE connection termination preserved as an explicit, separate operation.
+   * Used for security events such as account suspension, full password reset, or admin revocation.
+   * Normal logout must NOT invoke this method, to preserve independent multi-device sessions.
+   */
+  closeConnectionsForUser(userId: ObjectId): number {
+    const toRemove: string[] = [];
+    for (const [id, conn] of this.connections.entries()) {
+      if (conn.userId.equals(userId)) {
+        try {
+          conn.res.end();
+        } catch {
+          // ignore
+        }
+        toRemove.push(id);
+      }
+    }
+    for (const id of toRemove) {
+      this.connections.delete(id);
+    }
+    if (toRemove.length > 0) {
+      logger.debug({ userId: userId.toHexString(), closedCount: toRemove.length }, 'Closed SSE connections for user');
+    }
+    return toRemove.length;
   }
 
   getActiveConnectionsCount(): number {
@@ -102,9 +182,25 @@ export class ConnectionManager {
     return `id: ${event._id.toHexString()}\nevent: ${event.eventType}\ndata: ${data}\n\n`;
   }
 
-  broadcastEvent(event: OutboxEventDocument): void {
+  async broadcastEvent(event: OutboxEventDocument): Promise<void> {
     const message = this.formatSseMessage(event);
     const deadConnections: string[] = [];
+
+    // Authoritative check for team-scoped events: query committed database memberships
+    let activeMemberUserIds: Set<string> | null = null;
+    if (event.scope === 'team' && event.teamId) {
+      try {
+        const members = await membershipRepo.findTeamMembers(event.teamId);
+        activeMemberUserIds = new Set(members.map((m) => m.userId.toHexString()));
+      } catch (err: any) {
+        logger.error(
+          { err: err.message, teamId: event.teamId.toHexString() },
+          'Error querying team members for SSE broadcast authorization'
+        );
+        // Fail-safe: empty set prevents unauthorized data leakage
+        activeMemberUserIds = new Set();
+      }
+    }
 
     for (const conn of this.connections.values()) {
       if (!conn.hackathonId.equals(event.hackathonId)) {
@@ -116,9 +212,21 @@ export class ConnectionManager {
         // Public event: delivered to all subscribers of this hackathon
         this.writeToConnection(conn, message, deadConnections);
       } else if (event.scope === 'team') {
-        // Team event: delivered only if client belongs to that team
-        if (event.teamId && conn.teamId && conn.teamId.equals(event.teamId)) {
-          this.writeToConnection(conn, message, deadConnections);
+        // Team event: authoritatively verify against active database membership
+        if (event.teamId && activeMemberUserIds) {
+          // Defense against TOCTOU race: both in-memory unrevoked state AND authoritative DB membership must hold at write time
+          const isLocallyAuthorized = conn.teamId !== null && conn.teamId.equals(event.teamId);
+          const isDbAuthorized = activeMemberUserIds.has(conn.userId.toHexString());
+          const isAuthorized = isLocallyAuthorized && isDbAuthorized;
+
+          if (isAuthorized) {
+            this.writeToConnection(conn, message, deadConnections);
+          } else {
+            // Stale cache defense: if connection was previously cached for this team, revoke it
+            if (conn.teamId && conn.teamId.equals(event.teamId)) {
+              conn.teamId = null;
+            }
+          }
         }
       } else if (event.scope === 'user') {
         // User event: delivered only to targeted user

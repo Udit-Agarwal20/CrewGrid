@@ -5,6 +5,7 @@ import { membershipRepo } from '../membership/membership.repo.js';
 import { membershipService } from '../membership/membership.service.js';
 import { auditService } from '../audit/audit.service.js';
 import { outboxRepo } from '../../realtime/outbox.repo.js';
+import { connectionManager } from '../../realtime/connection.manager.js';
 import { AppError, JoinRequestResponse, JoinRequestStatus } from '@crewgrid/contracts';
 
 export class RequestService {
@@ -148,6 +149,9 @@ export class RequestService {
         return this.toResponse(updated);
       }
     });
+
+    // Promote client SSE connection to new team authorization after transaction commit
+    connectionManager.updateClientTeam(request.applicantId, request.hackathonId, request.teamId);
 
     return { request: approvedResponse, replayed };
   }

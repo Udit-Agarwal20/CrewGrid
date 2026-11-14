@@ -6,6 +6,7 @@ import { requestRepo } from '../requests/request.repo.js';
 import { inviteRepo } from '../invites/invite.repo.js';
 import { auditService } from '../audit/audit.service.js';
 import { outboxRepo } from '../../realtime/outbox.repo.js';
+import { connectionManager } from '../../realtime/connection.manager.js';
 import { idempotencyService, computeRequestHash } from '../idempotency/idempotency.service.js';
 import { withDomainTransaction } from '../../db/transaction.js';
 import { AppError, TeamResponse } from '@crewgrid/contracts';
@@ -229,6 +230,9 @@ export class MembershipService {
       }
     });
 
+    // Revoke stale status and promote connection to new team authorization after transaction commit
+    connectionManager.updateClientTeam(actorId, hackathonId, new ObjectId(createdTeam.id));
+
     return { team: createdTeam, replayed };
   }
 
@@ -389,7 +393,7 @@ export class MembershipService {
     const scope = `team.leave:${teamId.toHexString()}`;
     const payload = { teamId: teamId.toHexString() };
 
-    const { data: result, replayed } = await this.executeIdempotent({
+    const { data, replayed } = await this.executeIdempotent({
       actorId,
       scope,
       key: idempotencyKey,
@@ -437,7 +441,10 @@ export class MembershipService {
             session
           );
 
-          return { teamDeleted: false, successorId: null };
+          return {
+            result: { teamDeleted: false, successorId: null },
+            hackathonId: team.hackathonId
+          };
         }
 
         // Leader leaves: check remaining members
@@ -486,7 +493,10 @@ export class MembershipService {
             session
           );
 
-          return { teamDeleted: false, successorId: successorId.toHexString() };
+          return {
+            result: { teamDeleted: false, successorId: successorId.toHexString() },
+            hackathonId: team.hackathonId
+          };
         }
 
         // Last member leaves: logical deletion of team
@@ -528,11 +538,18 @@ export class MembershipService {
           session
         );
 
-        return { teamDeleted: true, successorId: null };
+        return {
+          result: { teamDeleted: true, successorId: null },
+          hackathonId: team.hackathonId
+        };
       }
     });
 
-    return { result, replayed };
+    // Synchronously revoke local connection team authorization immediately upon commit
+    const hackathonId = data.hackathonId instanceof ObjectId ? data.hackathonId : new ObjectId(data.hackathonId);
+    connectionManager.updateClientTeam(actorId, hackathonId, null, teamId);
+
+    return { result: data.result, replayed };
   }
 
   /**
@@ -550,7 +567,7 @@ export class MembershipService {
     const scope = `team.remove:${teamId.toHexString()}:${targetUserId.toHexString()}`;
     const payload = { teamId: teamId.toHexString(), targetUserId: targetUserId.toHexString() };
 
-    const { data: success, replayed } = await this.executeIdempotent({
+    const { data, replayed } = await this.executeIdempotent({
       actorId,
       scope,
       key: idempotencyKey,
@@ -603,11 +620,15 @@ export class MembershipService {
           session
         );
 
-        return true;
+        return { success: true, hackathonId: team.hackathonId };
       }
     });
 
-    return { success, replayed };
+    // Synchronously revoke local connection team authorization immediately upon commit
+    const hackathonId = data.hackathonId instanceof ObjectId ? data.hackathonId : new ObjectId(data.hackathonId);
+    connectionManager.updateClientTeam(targetUserId, hackathonId, null, teamId);
+
+    return { success: data.success, replayed };
   }
 
   /**

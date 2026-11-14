@@ -77,7 +77,11 @@ export function createSseRouter(): Router {
         }
 
         // Register client connection for live stream
-        const connectionId = connectionManager.addConnection(req.user!._id, hackathonId, teamId, res);
+        const tokenHash = req.sessionRecord?.tokenHash;
+        if (!tokenHash) {
+          throw new AppError(401, 'UNAUTHENTICATED', 'Valid session required for real-time stream');
+        }
+        const connectionId = connectionManager.addConnection(req.user!._id, hackathonId, teamId, res, tokenHash);
 
         req.on('close', () => {
           connectionManager.removeConnection(connectionId);

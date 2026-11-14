@@ -11,6 +11,7 @@ import {
 import { connectionManager } from '../src/realtime/connection.manager.js';
 import { outboxDispatcher } from '../src/realtime/dispatcher.js';
 import { outboxRepo } from '../src/realtime/outbox.repo.js';
+import { membershipRepo } from '../src/modules/membership/membership.repo.js';
 
 describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
   const app = createApp();
@@ -90,7 +91,7 @@ describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
     });
 
     // Broadcast via ConnectionManager
-    connectionManager.broadcastEvent(event);
+    await connectionManager.broadcastEvent(event);
 
     expect(user1Output).toContain('event: team.created');
     expect(user1Output).toContain('New Avengers');
@@ -130,6 +131,19 @@ describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
       flush: () => {}
     };
 
+    await membershipRepo.insertMembership({
+      hackathonId: hackathon._id,
+      teamId: teamAId,
+      userId: memberTeamA._id,
+      joinedAt: new Date()
+    });
+    await membershipRepo.insertMembership({
+      hackathonId: hackathon._id,
+      teamId: teamBId,
+      userId: memberTeamB._id,
+      joinedAt: new Date()
+    });
+
     connectionManager.addConnection(memberTeamA._id, hackathon._id, teamAId, mockResA);
     connectionManager.addConnection(memberTeamB._id, hackathon._id, teamBId, mockResB);
     connectionManager.addConnection(unassignedUser._id, hackathon._id, null, mockResU);
@@ -143,7 +157,7 @@ describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
       payload: { requestId: new ObjectId().toHexString() }
     });
 
-    connectionManager.broadcastEvent(event);
+    await connectionManager.broadcastEvent(event);
 
     // Only Member of Team A should receive the event!
     expect(outputTeamA).toContain('event: request.created');
@@ -184,7 +198,7 @@ describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
       payload: { status: 'accepted' }
     });
 
-    connectionManager.broadcastEvent(event);
+    await connectionManager.broadcastEvent(event);
 
     expect(outputTarget).toContain('event: request.resolved');
     expect(outputOther).toBe('');
@@ -222,7 +236,7 @@ describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
       payload: { name: 'Hack A Team' }
     });
 
-    connectionManager.broadcastEvent(eventA);
+    await connectionManager.broadcastEvent(eventA);
 
     expect(outputA).toContain('Hack A Team');
     expect(outputB).toBe('');
