@@ -4,7 +4,7 @@ import {
   Users,
   Search,
   Sparkles,
-  UserPlus,
+  Link2,
   ArrowLeft,
   Loader2
 } from 'lucide-react';
@@ -97,7 +97,7 @@ export function TeammateDiscovery() {
         <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
           <Link
             to={`/app/events/${hackathonId}/teams`}
-            className="hover:text-[#9BF5CC] flex items-center gap-1 transition"
+            className="hover:text-[#9BF5CC] flex items-center gap-1 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC] rounded"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back to Team Board
@@ -111,14 +111,19 @@ export function TeammateDiscovery() {
           subtitle="Discover participants looking for teams who have explicitly opted into discoverability. Find teammates by skill or timezone alignment."
           action={
             isLeader && (
-              <button
-                type="button"
-                onClick={() => setSelectedTeamForInvite(myTeam?.id || null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-2 transition shadow-sm"
-              >
-                <UserPlus className="w-4 h-4" />
-                Generate Team Invite
-              </button>
+              <div className="flex flex-col items-start sm:items-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTeamForInvite(myTeam?.id || null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-2 transition shadow-sm focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Create Team Invite Link
+                </button>
+                <span className="text-[11px] font-mono text-[#B5C1D4]">
+                  Single-use link for {myTeam?.name}
+                </span>
+              </div>
             )
           }
         />
@@ -129,7 +134,7 @@ export function TeammateDiscovery() {
             <button
               type="button"
               onClick={() => setActiveTab('all')}
-              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none ${
                 activeTab === 'all'
                   ? 'border-[#9BF5CC] text-[#9BF5CC]'
                   : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
@@ -142,7 +147,7 @@ export function TeammateDiscovery() {
             <button
               type="button"
               onClick={() => setActiveTab('suggestions')}
-              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none ${
                 activeTab === 'suggestions'
                   ? 'border-[#9BF5CC] text-[#9BF5CC]'
                   : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
@@ -160,21 +165,29 @@ export function TeammateDiscovery() {
             {/* Filter Bar */}
             <div className="p-4 rounded-2xl bg-[#171E31] border border-[#35405A] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               <div className="relative">
-                <Search className="w-4 h-4 text-[#B5C1D4] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-[#B5C1D4] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <label htmlFor="candidate-skill-filter" className="sr-only">
+                  Filter by skill
+                </label>
                 <input
+                  id="candidate-skill-filter"
                   type="text"
                   placeholder="Filter by skill (e.g. react, node)..."
                   value={skillFilter}
                   onChange={(e) => setSkillFilter(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/50 focus:outline-none focus:border-[#9BF5CC] transition"
+                  className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/50 focus:outline-none focus:border-[#9BF5CC] focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                 />
               </div>
 
               <div>
+                <label htmlFor="candidate-timezone-filter" className="sr-only">
+                  Filter by timezone
+                </label>
                 <select
+                  id="candidate-timezone-filter"
                   value={selectedTimezone}
                   onChange={(e) => setSelectedTimezone(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                 >
                   {COMMON_TIMEZONES.map((tz) => (
                     <option key={tz} value={tz}>
@@ -192,7 +205,7 @@ export function TeammateDiscovery() {
                       setSkillFilter('');
                       setSelectedTimezone('All Timezones');
                     }}
-                    className="text-xs font-mono text-[#9BF5CC] hover:underline"
+                    className="text-xs font-mono text-[#9BF5CC] hover:underline focus-visible:ring-2 focus-visible:ring-[#9BF5CC] rounded p-1"
                   >
                     Clear Filters
                   </button>
@@ -200,7 +213,7 @@ export function TeammateDiscovery() {
               )}
             </div>
 
-            {/* Candidate Results States: Error, Loading, Empty, and Success are mutually exclusive */}
+            {/* Candidate Results States */}
             {candidateError ? (
               <ErrorPanel
                 title="Could not load candidates"
@@ -227,8 +240,6 @@ export function TeammateDiscovery() {
                   <CandidateCard
                     key={cand.id}
                     user={cand}
-                    canInvite={Boolean(isLeader)}
-                    onInvite={() => setSelectedTeamForInvite(myTeam?.id || null)}
                   />
                 ))}
               </div>
@@ -239,7 +250,7 @@ export function TeammateDiscovery() {
         {/* Tab 2: Smart Recommendations (Leader only) */}
         {activeTab === 'suggestions' && isLeader && (
           <div className="space-y-6">
-            <div className="p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A] flex items-center justify-between gap-4">
+            <div className="p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A] space-y-2">
               <div className="text-xs text-[#B5C1D4]">
                 <strong className="text-[#9BF5CC]">Explainable Matching:</strong> Suggestions are scored via{' '}
                 <code className="text-[#E9EDF5] bg-[#0B1020] px-1.5 py-0.5 rounded font-mono">
@@ -247,6 +258,9 @@ export function TeammateDiscovery() {
                 </code>
                 . Only discoverable participants who are not yet in a team are suggested.
               </div>
+              <p className="text-[11px] text-[#B5C1D4]/80">
+                To invite a candidate to your team, generate a team invite link using the "Create Team Invite Link" action above and share it directly with them.
+              </p>
             </div>
 
             {loadingSuggestions ? (
@@ -274,14 +288,10 @@ export function TeammateDiscovery() {
                         <h3 className="font-bold text-base text-[#E9EDF5]">
                           {suggestion.displayName}
                         </h3>
+                        <span className="text-xs font-mono text-[#9BF5CC]">
+                          Match Score: {Math.round(suggestion.score * 100)}%
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTeamForInvite(myTeam?.id || null)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition shrink-0"
-                      >
-                        Invite
-                      </button>
                     </div>
 
                     <ScoreBreakdown suggestion={suggestion} />

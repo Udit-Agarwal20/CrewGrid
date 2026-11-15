@@ -149,27 +149,27 @@ export function EngineeringEvidence() {
         {/* Executive Verification Metric Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
-            <div className="text-2xl font-black font-mono text-[#9BF5CC]">104 / 104</div>
-            <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">API Integration Tests</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">13 suites on real MongoDB RS</div>
+            <div className="text-2xl font-black font-mono text-[#9BF5CC]">100%</div>
+            <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">API Integration Pass</div>
+            <div className="text-[11px] text-[#B5C1D4] mt-1">Comprehensive test suites on real MongoDB RS</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
             <div className="text-2xl font-black font-mono text-[#9BF5CC]">0</div>
             <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">Invariant Violations</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">Validated via verify:invariants</div>
+            <div className="text-[11px] text-[#B5C1D4] mt-1">Validated via verify:invariants</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
             <div className="text-2xl font-black font-mono text-[#9BF5CC]">50-Way Race</div>
             <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">Zero Over-Allocation</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">Exactly 1 winner, 49 rejected (409)</div>
+            <div className="text-[11px] text-[#B5C1D4] mt-1">Exactly 1 winner, 49 rejected (409)</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A]">
             <div className="text-2xl font-black font-mono text-[#9BF5CC]">88.83 ms</div>
             <div className="text-xs font-bold uppercase text-[#B5C1D4] mt-1">Local 100-VU p95</div>
-            <div className="text-[11px] text-[#B5C1D4]/70 mt-1">10k users / 2k teams dataset</div>
+            <div className="text-[11px] text-[#B5C1D4] mt-1">10k users / 2k teams dataset</div>
           </div>
         </div>
 
@@ -387,16 +387,16 @@ export function EngineeringEvidence() {
             </div>
             <div className="space-y-2">
               <div className="p-2.5 rounded-lg bg-[#0B1020] text-[#9BF5CC]">
-                pnpm test:api <span className="text-[#B5C1D4]/60"># Runs 104 integration &amp; race tests</span>
+                pnpm test:api <span className="text-[#B5C1D4]"># Runs integration, SSE authorization &amp; race tests</span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#0B1020] text-[#9BF5CC]">
-                pnpm --filter @crewgrid/web test <span className="text-[#B5C1D4]/60"># Runs 14 web unit &amp; routing tests</span>
+                pnpm --filter @crewgrid/web test <span className="text-[#B5C1D4]"># Runs web unit &amp; accessibility tests</span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#0B1020] text-[#9BF5CC]">
-                pnpm verify:invariants <span className="text-[#B5C1D4]/60"># Validates all 9 database invariants</span>
+                pnpm verify:invariants <span className="text-[#B5C1D4]"># Validates all 9 database invariants</span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#0B1020] text-[#9BF5CC]">
-                pnpm test:e2e <span className="text-[#B5C1D4]/60"># Runs 16 Playwright browser tests</span>
+                pnpm test:e2e <span className="text-[#B5C1D4]"># Runs Playwright browser &amp; accessibility tests</span>
               </div>
             </div>
           </div>

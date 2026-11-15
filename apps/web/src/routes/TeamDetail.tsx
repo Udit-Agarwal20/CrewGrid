@@ -23,8 +23,7 @@ import {
 import {
   useTeamRequests,
   useApproveJoinRequest,
-  useDeclineJoinRequest,
-  useCreateJoinRequest
+  useDeclineJoinRequest
 } from '../hooks/useRequests';
 import { useTeamSuggestions } from '../hooks/useTeammates';
 import { TeamMember } from '@crewgrid/contracts';
@@ -39,6 +38,7 @@ import { TeamMemberRow } from '../components/teams/TeamMemberRow';
 import { AuditTimeline } from '../components/teams/AuditTimeline';
 import { EditTeamModal } from '../components/teams/EditTeamModal';
 import { InviteModal } from '../components/invites/InviteModal';
+import { JoinRequestModal } from '../components/requests/JoinRequestModal';
 import { RequestRow } from '../components/requests/RequestRow';
 import { ScoreBreakdown } from '../components/matching/ScoreBreakdown';
 
@@ -52,7 +52,6 @@ export function TeamDetail() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
-  const [joinMessage, setJoinMessage] = useState('');
 
   // Dialog states for member management
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
@@ -73,7 +72,6 @@ export function TeamDetail() {
   const transferLeadershipMutation = useTransferLeadership();
   const approveRequestMutation = useApproveJoinRequest();
   const declineRequestMutation = useDeclineJoinRequest();
-  const createRequestMutation = useCreateJoinRequest();
 
   if (loadingTeam) {
     return (
@@ -183,20 +181,6 @@ export function TeamDetail() {
     }
   };
 
-  const handleSendJoinRequest = async () => {
-    try {
-      await createRequestMutation.mutateAsync({
-        teamId: team.id,
-        message: joinMessage
-      });
-      success('Join request sent!', 'The team leader has been notified of your request.');
-      setIsJoinModalOpen(false);
-      setJoinMessage('');
-    } catch (err: any) {
-      toastError('Could not send join request', err.message);
-    }
-  };
-
   return (
     <AppShell hackathonId={team.hackathonId}>
       <div className="space-y-6">
@@ -234,7 +218,7 @@ export function TeamDetail() {
                   {team.description}
                 </p>
               ) : (
-                <p className="text-sm text-[#B5C1D4]/60 italic">No description provided.</p>
+                <p className="text-sm text-[#B5C1D4] italic">No description provided.</p>
               )}
 
               {/* Skills Tags */}
@@ -277,6 +261,7 @@ export function TeamDetail() {
                     <button
                       type="button"
                       onClick={() => setIsInviteOpen(true)}
+                      aria-label="Generate team invite link"
                       className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-1.5 transition shadow-sm"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
@@ -546,45 +531,15 @@ export function TeamDetail() {
 
         {/* Join Request Dialog */}
         {isJoinModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="w-full max-w-md p-6 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl space-y-4">
-              <h3 className="text-lg font-bold text-[#E9EDF5]">Request to Join {team.name}</h3>
-              <p className="text-xs text-[#B5C1D4]">
-                Introduce yourself to the team leader. Mention your relevant experience and how you can contribute.
-              </p>
-              <div>
-                <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
-                  Message (Optional)
-                </label>
-                <textarea
-                  value={joinMessage}
-                  onChange={(e) => setJoinMessage(e.target.value)}
-                  maxLength={500}
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-[#E9EDF5] text-xs focus:outline-none focus:border-[#9BF5CC] transition resize-none"
-                  placeholder="Hey, I specialize in full-stack TypeScript and would love to build Problem Statement 1 together!"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsJoinModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#B5C1D4] hover:bg-[#222A42] transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={createRequestMutation.isPending}
-                  onClick={handleSendJoinRequest}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition disabled:opacity-50"
-                >
-                  {createRequestMutation.isPending ? 'Sending...' : 'Send Request'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <JoinRequestModal
+            isOpen={isJoinModalOpen}
+            teamId={team.id}
+            teamName={team.name}
+            onClose={() => setIsJoinModalOpen(false)}
+            onSuccess={() => {
+              refetchTeam();
+            }}
+          />
         )}
 
         {/* Remove Member Dialog */}

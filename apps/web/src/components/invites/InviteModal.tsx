@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Copy, Check, Clock, ShieldAlert, Loader2, Link2, Trash2 } from 'lucide-react';
+import { Copy, Check, Clock, ShieldAlert, Loader2, Link2, Trash2 } from 'lucide-react';
+import { Modal } from '../common/Modal';
 import { useTeamInvites, useCreateInvite, useRevokeInvite } from '../../hooks/useInvites';
 import { useToast } from '../../context/ToastContext';
 
@@ -56,61 +57,52 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
     }
   };
 
+  const isPending = createInviteMutation.isPending || revokeInviteMutation.isPending;
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="invite-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !createInviteMutation.isPending) onClose();
-      }}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Team Invite Links"
+      icon={<Link2 className="w-4 h-4" />}
+      maxWidth="max-w-lg"
+      isSubmitting={isPending}
     >
-      <div className="w-full max-w-lg p-6 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl text-[#E9EDF5] my-8 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-4 border-b border-[#35405A]">
-          <div className="flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-lg bg-[#9BF5CC]/15 text-[#9BF5CC] flex items-center justify-center">
-              <Link2 className="w-4 h-4" />
-            </span>
-            <h2 id="invite-modal-title" className="text-lg font-bold text-[#E9EDF5]">
-              Team Invite Links
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      <div>
+        {/* Important Bearer Link Notice */}
+        <div className="p-3.5 rounded-xl bg-[#222A42]/60 border border-[#35405A] text-xs text-[#B5C1D4] leading-relaxed mb-4">
+          <strong className="text-[#9BF5CC]">Single-Use Team Links:</strong> Anyone with possession of the invite link can claim an open seat on your team immediately. Possession of the link—not a candidate selection—determines who joins. Share the link privately with your intended teammate.
         </div>
 
         {/* Generate New Invite Section */}
-        <div className="mt-5 p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A]">
+        <div className="p-4 rounded-xl bg-[#0B1020]/60 border border-[#35405A]">
           <h3 className="text-xs font-bold text-[#E9EDF5] uppercase tracking-wider mb-2 font-mono">
             Generate Single-Use Expiring Invite
           </h3>
-          <p className="text-xs text-[#B5C1D4] mb-3">
-            Sharing this link allows anyone with the link to claim a seat immediately without manual review.
-          </p>
 
-          <div className="flex items-center gap-3">
-            <select
-              value={expiresInHours}
-              onChange={(e) => setExpiresInHours(parseInt(e.target.value, 10))}
-              className="px-3 py-2 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
-            >
-              <option value={12}>Expires in 12 hours</option>
-              <option value={24}>Expires in 24 hours</option>
-              <option value={48}>Expires in 48 hours</option>
-              <option value={72}>Expires in 72 hours</option>
-            </select>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mt-3">
+            <div className="flex-1">
+              <label htmlFor="invite-expiry" className="sr-only">
+                Invite expiration window
+              </label>
+              <select
+                id="invite-expiry"
+                value={expiresInHours}
+                onChange={(e) => setExpiresInHours(parseInt(e.target.value, 10))}
+                className="w-full px-3 py-2 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+              >
+                <option value={12}>Expires in 12 hours</option>
+                <option value={24}>Expires in 24 hours</option>
+                <option value={48}>Expires in 48 hours</option>
+                <option value={72}>Expires in 72 hours</option>
+              </select>
+            </div>
 
             <button
               type="button"
               onClick={handleGenerate}
               disabled={createInviteMutation.isPending}
-              className="px-4 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] flex items-center gap-1.5 transition disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none flex items-center justify-center gap-1.5 transition disabled:opacity-50 shadow-sm shrink-0"
             >
               {createInviteMutation.isPending ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -132,16 +124,21 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
                 Copy this link now. The token is kept only in browser memory and cannot be recovered once you close this window.
               </p>
               <div className="flex items-center gap-2">
+                <label htmlFor="generated-invite-url" className="sr-only">
+                  Generated Invite URL
+                </label>
                 <input
+                  id="generated-invite-url"
                   type="text"
                   readOnly
                   value={createdUrl}
-                  className="flex-1 px-3 py-2 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-mono text-[#E9EDF5] select-all focus:outline-none"
+                  className="flex-1 px-3 py-2 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-mono text-[#E9EDF5] select-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
                 />
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="px-3 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] flex items-center gap-1.5 transition shrink-0"
+                  aria-label={copied ? 'Copied invite link' : 'Copy invite link to clipboard'}
+                  className="px-3 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none flex items-center gap-1.5 transition shrink-0"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copied ? 'Copied' : 'Copy'}
@@ -152,8 +149,8 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
         </div>
 
         {/* Existing Invites List */}
-        <div className="mt-6">
-          <h3 className="text-xs font-bold text-[#E9EDF5] uppercase tracking-wider mb-3 font-mono">
+        <div className="mt-5">
+          <h3 className="text-xs font-bold text-[#E9EDF5] uppercase tracking-wider mb-2 font-mono">
             Active & Past Invites
           </h3>
 
@@ -164,7 +161,7 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
               No previous invites found.
             </p>
           ) : (
-            <div className="space-y-2 max-h-48 overflow-y-auto">
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
               {invites.map((inv) => (
                 <div
                   key={inv.id}
@@ -172,7 +169,9 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-[#E9EDF5]">ID: {inv.id}</span>
+                      <span className="font-mono text-[11px] text-[#E9EDF5] truncate max-w-[140px] sm:max-w-none">
+                        ID: {inv.id}
+                      </span>
                       <span
                         className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold uppercase ${
                           inv.status === 'available'
@@ -196,9 +195,9 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
                       type="button"
                       onClick={() => handleRevoke(inv.id)}
                       disabled={revokeInviteMutation.isPending}
-                      className="p-1 rounded text-[#B5C1D4] hover:text-[#F87171] hover:bg-[#222A42] transition"
+                      className="p-1 rounded text-[#B5C1D4] hover:text-[#F87171] hover:bg-[#222A42] focus-visible:ring-2 focus-visible:ring-[#F87171] focus:outline-none transition"
                       title="Revoke this invite"
-                      aria-label="Revoke invite"
+                      aria-label={`Revoke invite ${inv.id}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -209,17 +208,16 @@ export function InviteModal({ isOpen, teamId, onClose }: InviteModalProps) {
           )}
         </div>
 
-        <div className="mt-6 pt-4 border-t border-[#35405A] flex justify-end">
+        <div className="mt-5 pt-3 border-t border-[#35405A] flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] transition"
+            className="px-4 py-2 rounded-lg bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none transition"
           >
             Done
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
-

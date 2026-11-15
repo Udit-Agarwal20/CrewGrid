@@ -236,45 +236,48 @@ export function InviteRedeem() {
               <form onSubmit={handleAuthSubmit} className="space-y-3 pt-1">
                 {authMode === 'register' && (
                   <div>
-                    <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
+                    <label htmlFor="redeem-fullname" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
                       Full Name
                     </label>
                     <input
+                      id="redeem-fullname"
                       type="text"
                       required
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC]"
+                      className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
                       placeholder="Ada Lovelace"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
+                  <label htmlFor="redeem-email" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
                     Email Address
                   </label>
                   <input
+                    id="redeem-email"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC]"
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
                     placeholder="user@example.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
-                    Password {authMode === 'register' && <span className="text-[#B5C1D4]/60">(min 12 chars)</span>}
+                  <label htmlFor="redeem-password" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
+                    Password {authMode === 'register' && <span className="text-[#B5C1D4]">(min 12 chars)</span>}
                   </label>
                   <input
+                    id="redeem-password"
                     type="password"
                     required
                     minLength={authMode === 'register' ? 12 : undefined}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC]"
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
                     placeholder="••••••••••••"
                   />
                 </div>
