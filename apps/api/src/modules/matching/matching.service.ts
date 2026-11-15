@@ -71,6 +71,54 @@ function isMinuteInWindow(m: number, start: number, duration: number): boolean {
   }
 }
 
+export function compareSuggestions(a: Suggestion, b: Suggestion): number {
+  if (b.score !== a.score) return b.score - a.score;
+  if (b.components.complementarySkills !== a.components.complementarySkills) {
+    return b.components.complementarySkills - a.components.complementarySkills;
+  }
+  if (b.components.timezoneFit !== a.components.timezoneFit) {
+    return b.components.timezoneFit - a.components.timezoneFit;
+  }
+  return a.userId.localeCompare(b.userId);
+}
+
+export class TopKSuggestions {
+  private readonly k: number;
+  public readonly items: Suggestion[] = [];
+
+  constructor(k = 20) {
+    this.k = k;
+  }
+
+  get worstItem(): Suggestion | undefined {
+    return this.items.length >= this.k ? this.items[this.items.length - 1] : undefined;
+  }
+
+  get worstScore(): number {
+    return this.worstItem ? this.worstItem.score : -1;
+  }
+
+  add(item: Suggestion): void {
+    if (this.items.length < this.k) {
+      this.items.push(item);
+      this.items.sort(compareSuggestions);
+      return;
+    }
+
+    const worst = this.items[this.items.length - 1]!;
+    if (compareSuggestions(item, worst) >= 0) {
+      return;
+    }
+
+    this.items[this.items.length - 1] = item;
+    this.items.sort(compareSuggestions);
+  }
+
+  getResults(): Suggestion[] {
+    return this.items;
+  }
+}
+
 export class MatchingService {
   private get db() {
     return getDatabase();
@@ -88,37 +136,71 @@ export class MatchingService {
   }): Promise<{ candidates: PublicUser[]; hasMore: boolean; nextCursor: string | null }> {
     const { hackathonId, skill, timezone, cursor, limit } = params;
 
-    // Find all users already assigned to a team in this hackathon
-    const assignedUserIds = await this.db
-      .collection('memberships')
-      .distinct('userId', { hackathonId });
-
-    const filter: any = {
-      _id: { $nin: assignedUserIds },
+    const matchStage: any = {
       discoverable: true
     };
 
     if (skill) {
       const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.skills = { $elemMatch: { $regex: `^${escaped}$`, $options: 'i' } };
+      matchStage.skills = { $elemMatch: { $regex: `^${escaped}$`, $options: 'i' } };
     }
 
     if (timezone) {
-      filter.timezone = timezone;
+      matchStage.timezone = timezone;
     }
 
     if (cursor) {
-      filter.$or = [
+      matchStage.$or = [
         { updatedAt: { $lt: cursor.updatedAt } },
         { updatedAt: cursor.updatedAt, _id: { $lt: cursor.id } }
       ];
     }
 
+    // C06: Use an indexed $lookup anti-join instead of pulling all assigned user IDs into memory
+    const pipeline: any[] = [
+      { $match: matchStage },
+      { $sort: { updatedAt: -1, _id: -1 } },
+      {
+        $lookup: {
+          from: 'memberships',
+          let: { uid: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$hackathonId', hackathonId] },
+                    { $eq: ['$userId', '$$uid'] }
+                  ]
+                }
+              }
+            },
+            { $project: { _id: 1 } },
+            { $limit: 1 }
+          ],
+          as: 'membership'
+        }
+      },
+      { $match: { membership: { $size: 0 } } },
+      {
+        $project: {
+          _id: 1,
+          displayName: 1,
+          handleNormalized: 1,
+          bio: 1,
+          skills: 1,
+          timezone: 1,
+          preferredHours: 1,
+          discoverable: 1,
+          updatedAt: 1
+        }
+      },
+      { $limit: limit + 1 }
+    ];
+
     const docs = await this.db
       .collection<UserDocument>('users')
-      .find(filter)
-      .sort({ updatedAt: -1, _id: -1 })
-      .limit(limit + 1)
+      .aggregate<UserDocument>(pipeline)
       .toArray();
 
     const hasMore = docs.length > limit;
@@ -177,24 +259,55 @@ export class MatchingService {
     const requiredSkills = team.requiredSkills || [];
     const missingSkills = requiredSkills.filter((r) => !teamSkillSet.has(r.toLowerCase()));
 
-    // 2. Query eligible candidates (discoverable, not in any team for this hackathon)
-    const assignedUserIds = await this.db
-      .collection('memberships')
-      .distinct('userId', { hackathonId: team.hackathonId });
+    // 2. Query eligible candidates with indexed anti-join (C05, C06: complete, scalable, streaming)
+    // We avoid arbitrary pre-truncation ($limit: 300) to ensure exact global top-20 ranking
+    // while keeping memory strictly bounded to O(K) via TopKSuggestions.
+    const pipeline: any[] = [
+      {
+        $match: {
+          discoverable: true
+        }
+      },
+      {
+        $lookup: {
+          from: 'memberships',
+          let: { uid: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$hackathonId', team.hackathonId] },
+                    { $eq: ['$userId', '$$uid'] }
+                  ]
+                }
+              }
+            },
+            { $project: { _id: 1 } },
+            { $limit: 1 }
+          ],
+          as: 'm'
+        }
+      },
+      { $match: { m: { $size: 0 } } },
+      {
+        $project: {
+          _id: 1,
+          displayName: 1,
+          skills: 1,
+          timezone: 1,
+          preferredHours: 1
+        }
+      }
+    ];
 
-    const candidates = await this.db
+    const cursor = this.db
       .collection<UserDocument>('users')
-      .find({
-        _id: { $nin: assignedUserIds },
-        discoverable: true
-      })
-      .limit(100)
-      .toArray();
+      .aggregate<UserDocument>(pipeline, { batchSize: 500 });
 
-    // 3. Compute score and reasons for each candidate
-    const suggestions: Suggestion[] = [];
+    const topK = new TopKSuggestions(20);
 
-    for (const cand of candidates) {
+    for await (const cand of cursor) {
       const candSkills = (cand.skills || []).map((s) => s.toLowerCase());
 
       // Complementary Skills Score C
@@ -222,6 +335,20 @@ export class MatchingService {
         }
       }
 
+      // Mathematical upper bound pruning:
+      // Since timezoneFitScore <= 100, score <= round(0.7 * compSkillsScore + 30).
+      // If upper bound cannot beat current 20th candidate, skip timezone calculation.
+      const maxPossibleScore = Math.round(0.7 * compSkillsScore + 30);
+      const worst = topK.worstItem;
+      if (topK.items.length >= 20 && worst) {
+        if (
+          maxPossibleScore < worst.score ||
+          (maxPossibleScore === worst.score && compSkillsScore < worst.components.complementarySkills)
+        ) {
+          continue;
+        }
+      }
+
       // Timezone Fit Score T
       let timezoneFitScore: number;
       let timezoneReason: string;
@@ -244,7 +371,7 @@ export class MatchingService {
       // Overall Score: 0.7 * C + 0.3 * T
       const score = Math.round(0.7 * compSkillsScore + 0.3 * timezoneFitScore);
 
-      suggestions.push({
+      topK.add({
         userId: cand._id.toHexString(),
         displayName: cand.displayName,
         score,
@@ -256,23 +383,7 @@ export class MatchingService {
       });
     }
 
-    // 4. Deterministic tie-breaking:
-    // Primary: score descending
-    // Secondary: complementarySkills descending
-    // Tertiary: timezoneFit descending
-    // Quaternary: userId ascending
-    suggestions.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      if (b.components.complementarySkills !== a.components.complementarySkills) {
-        return b.components.complementarySkills - a.components.complementarySkills;
-      }
-      if (b.components.timezoneFit !== a.components.timezoneFit) {
-        return b.components.timezoneFit - a.components.timezoneFit;
-      }
-      return a.userId.localeCompare(b.userId);
-    });
-
-    return suggestions.slice(0, 20);
+    return topK.getResults();
   }
 }
 
