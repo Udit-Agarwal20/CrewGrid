@@ -9,10 +9,20 @@ export const RealtimeEventTypeSchema = z.enum([
   'request.created',
   'request.resolved',
   'leader.transferred',
-  'team.deleted'
+  'team.deleted',
+  'sync.gap'
 ]);
 
 export type RealtimeEventType = z.infer<typeof RealtimeEventTypeSchema>;
+
+export const SyncGapReasonSchema = z.enum(['overflow', 'expired']);
+export type SyncGapReason = z.infer<typeof SyncGapReasonSchema>;
+
+export const SyncGapPayloadSchema = z.object({
+  gap: z.literal(true),
+  reason: SyncGapReasonSchema
+});
+export type SyncGapPayload = z.infer<typeof SyncGapPayloadSchema>;
 
 export const RealtimeEventScopeSchema = z.enum(['public-hackathon', 'team', 'user']);
 

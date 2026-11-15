@@ -42,7 +42,7 @@ async function bootstrap() {
 
     const shutdown = async (signal: string) => {
       logger.info({ signal }, 'Graceful shutdown initiated...');
-      outboxDispatcher.stop();
+      await outboxDispatcher.stop();
       connectionManager.closeAll();
       server.close(async () => {
         logger.info('HTTP server closed.');

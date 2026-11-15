@@ -55,10 +55,11 @@ test.describe('Routing & Hackathon Synchronization Regression Suite', () => {
     await expect(page).toHaveURL(/\/app$/);
 
     // Verify sessionStorage was sanitized
-    const storedValue = await page.evaluate(() => {
-      return sessionStorage.getItem('crewgrid_active_hackathon');
-    });
-    expect(storedValue).toBe(HACKATHON_1_ID);
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => sessionStorage.getItem('crewgrid_active_hackathon'));
+      })
+      .toBe(HACKATHON_1_ID);
 
     // Verify sidebar Discover Teams link points to valid ID, NOT default
     const discoverLink = page.getByRole('link', { name: /discover teams/i });

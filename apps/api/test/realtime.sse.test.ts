@@ -21,9 +21,9 @@ describe('Checkpoint M3-C: Real-time SSE & Outbox Dispatcher Tests', () => {
     connectionManager.closeAll();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     connectionManager.closeAll();
-    outboxDispatcher.stop();
+    await outboxDispatcher.stop();
   });
 
   // --------------------------------------------------------------------------

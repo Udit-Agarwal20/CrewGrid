@@ -13,7 +13,12 @@ export interface SseClientConnection {
   res: Response;
   tokenHash?: string;
   connectedAt: Date;
+  buffering?: boolean;
+  buffer?: OutboxEventDocument[];
+  flushing?: boolean;
 }
+
+export const MAX_HANDSHAKE_BUFFER_SIZE = 100;
 
 export class ConnectionManager {
   private connections = new Map<string, SseClientConnection>();
@@ -39,7 +44,8 @@ export class ConnectionManager {
     hackathonId: ObjectId,
     teamId: ObjectId | null,
     res: Response,
-    tokenHash?: string
+    tokenHash?: string,
+    options?: { buffering?: boolean }
   ): string {
     const connectionId = crypto.randomUUID();
     const conn: SseClientConnection = {
@@ -49,7 +55,9 @@ export class ConnectionManager {
       teamId,
       res,
       tokenHash,
-      connectedAt: new Date()
+      connectedAt: new Date(),
+      buffering: options?.buffering ?? false,
+      buffer: options?.buffering ? [] : undefined
     };
 
     this.connections.set(connectionId, conn);
@@ -59,6 +67,106 @@ export class ConnectionManager {
     );
 
     return connectionId;
+  }
+
+  getClientTeamId(connectionId: string): ObjectId | null {
+    const conn = this.connections.get(connectionId);
+    return conn ? conn.teamId : null;
+  }
+
+  async flushBuffer(connectionId: string, replayedEventIds?: Set<string>): Promise<void> {
+    const conn = this.connections.get(connectionId);
+    if (!conn || !conn.buffering || conn.flushing) return;
+    conn.flushing = true;
+
+    const MAX_FLUSH_PASSES = 10;
+    let pass = 0;
+    let totalFlushed = 0;
+    const deadConnections: string[] = [];
+
+    try {
+      while (pass < MAX_FLUSH_PASSES) {
+        pass++;
+        const batch = conn.buffer || [];
+        conn.buffer = [];
+
+        for (const event of batch) {
+          if (replayedEventIds && replayedEventIds.has(event._id.toHexString())) {
+            continue;
+          }
+
+          totalFlushed++;
+
+          // Re-verify authorization at socket delivery boundary (Investigation 2 fix)
+          let isAuthorized = false;
+          if (event.scope === 'public-hackathon') {
+            isAuthorized = true;
+          } else if (event.scope === 'team') {
+            if (event.teamId && conn.teamId && conn.teamId.equals(event.teamId)) {
+              try {
+                const active = await membershipRepo.findActiveMembership(conn.hackathonId, conn.userId);
+                if (active && active.teamId.equals(event.teamId)) {
+                  isAuthorized = true;
+                } else {
+                  // Stale cache defense: clear revoked team authorization
+                  conn.teamId = null;
+                }
+              } catch {
+                // Fail safe on transient DB failure
+                isAuthorized = false;
+              }
+            }
+          } else if (event.scope === 'user') {
+            if (event.userId && conn.userId.equals(event.userId)) {
+              isAuthorized = true;
+            }
+          }
+
+          if (isAuthorized) {
+            const message = this.formatSseMessage(event);
+            this.writeToConnection(conn, message, deadConnections);
+          }
+        }
+
+        if (!this.connections.has(connectionId)) {
+          break;
+        }
+
+        if (!conn.buffer || conn.buffer.length === 0) {
+          conn.buffering = false;
+          conn.buffer = undefined;
+          break;
+        }
+
+        if (pass >= MAX_FLUSH_PASSES || totalFlushed >= MAX_HANDSHAKE_BUFFER_SIZE) {
+          logger.warn(
+            { connectionId: conn.connectionId, pass, totalFlushed, bufferLength: conn.buffer?.length },
+            'Flush buffer drain limit reached under sustained throughput: triggering sync.gap fallback'
+          );
+          conn.buffering = false;
+          conn.buffer = undefined;
+          try {
+            conn.res.write(this.formatSyncGapMessage(conn.hackathonId, 'overflow'));
+            if (typeof (conn.res as any).flush === 'function') {
+              (conn.res as any).flush();
+            }
+          } catch {
+            deadConnections.push(conn.connectionId);
+          }
+          break;
+        }
+      }
+
+      for (const deadId of deadConnections) {
+        this.removeConnection(deadId);
+      }
+    } catch (err) {
+      conn.buffering = false;
+      conn.buffer = undefined;
+      throw err;
+    } finally {
+      conn.flushing = false;
+    }
   }
 
   removeConnection(connectionId: string): void {
@@ -182,9 +290,19 @@ export class ConnectionManager {
     return `id: ${event._id.toHexString()}\nevent: ${event.eventType}\ndata: ${data}\n\n`;
   }
 
-  async broadcastEvent(event: OutboxEventDocument): Promise<void> {
+  formatSyncGapMessage(_hackathonId: ObjectId, reason: 'overflow' | 'expired' | 'fallback'): string {
+    const data = JSON.stringify({
+      gap: true,
+      reason
+    });
+    // Omit synthetic id line to prevent corrupting the client's Last-Event-ID replay cursor
+    return `event: sync.gap\ndata: ${data}\n\n`;
+  }
+
+  async broadcastEvent(event: OutboxEventDocument): Promise<{ authError?: boolean }> {
     const message = this.formatSseMessage(event);
     const deadConnections: string[] = [];
+    let authError = false;
 
     // Authoritative check for team-scoped events: query committed database memberships
     let activeMemberUserIds: Set<string> | null = null;
@@ -199,6 +317,7 @@ export class ConnectionManager {
         );
         // Fail-safe: empty set prevents unauthorized data leakage
         activeMemberUserIds = new Set();
+        authError = true;
       }
     }
 
@@ -210,7 +329,7 @@ export class ConnectionManager {
       // Check scope authorization
       if (event.scope === 'public-hackathon') {
         // Public event: delivered to all subscribers of this hackathon
-        this.writeToConnection(conn, message, deadConnections);
+        this.deliverToConnection(conn, event, message, deadConnections);
       } else if (event.scope === 'team') {
         // Team event: authoritatively verify against active database membership
         if (event.teamId && activeMemberUserIds) {
@@ -220,9 +339,9 @@ export class ConnectionManager {
           const isAuthorized = isLocallyAuthorized && isDbAuthorized;
 
           if (isAuthorized) {
-            this.writeToConnection(conn, message, deadConnections);
-          } else {
-            // Stale cache defense: if connection was previously cached for this team, revoke it
+            this.deliverToConnection(conn, event, message, deadConnections);
+          } else if (!authError) {
+            // Stale cache defense: only revoke if DB query succeeded and confirmed user is no longer a member
             if (conn.teamId && conn.teamId.equals(event.teamId)) {
               conn.teamId = null;
             }
@@ -231,7 +350,7 @@ export class ConnectionManager {
       } else if (event.scope === 'user') {
         // User event: delivered only to targeted user
         if (event.userId && conn.userId.equals(event.userId)) {
-          this.writeToConnection(conn, message, deadConnections);
+          this.deliverToConnection(conn, event, message, deadConnections);
         }
       }
     }
@@ -239,6 +358,42 @@ export class ConnectionManager {
     for (const deadId of deadConnections) {
       this.removeConnection(deadId);
     }
+
+    return { authError };
+  }
+
+  private deliverToConnection(
+    conn: SseClientConnection,
+    event: OutboxEventDocument,
+    message: string,
+    deadConnections: string[]
+  ): void {
+    if (conn.buffering) {
+      if (!conn.buffer) {
+        conn.buffer = [];
+      }
+      // Hard buffer limit: if handshake buffer exceeds limit, trigger safe sync.gap and clear buffer
+      if (conn.buffer.length >= MAX_HANDSHAKE_BUFFER_SIZE) {
+        logger.warn(
+          { connectionId: conn.connectionId, bufferLength: conn.buffer.length },
+          'Handshake buffer overflow: forcing sync.gap'
+        );
+        conn.buffer = [];
+        conn.buffering = false;
+        try {
+          conn.res.write(this.formatSyncGapMessage(conn.hackathonId, 'overflow'));
+          if (typeof (conn.res as any).flush === 'function') {
+            (conn.res as any).flush();
+          }
+        } catch {
+          deadConnections.push(conn.connectionId);
+        }
+        return;
+      }
+      conn.buffer.push(event);
+      return;
+    }
+    this.writeToConnection(conn, message, deadConnections);
   }
 
   private writeToConnection(
