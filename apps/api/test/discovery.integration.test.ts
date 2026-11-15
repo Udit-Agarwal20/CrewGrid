@@ -300,7 +300,9 @@ describe('Checkpoint M3-A: Discovery & Profile Integration Tests', () => {
         { $set: { discoverable: true, skills: ['python', 'pandas'], timezone: 'Asia/Kolkata' } }
       );
 
-      const { sessionCookie } = await createTestSession((await createTestUser())._id);
+      const viewer = await createTestUser();
+      await db.collection('users').updateOne({ _id: viewer._id }, { $set: { discoverable: false } });
+      const { sessionCookie } = await createTestSession(viewer._id);
 
       const skillRes = await request(app)
         .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?skill=rust`)
@@ -317,6 +319,204 @@ describe('Checkpoint M3-A: Discovery & Profile Integration Tests', () => {
       expect(tzRes.status).toBe(200);
       expect(tzRes.body.data.length).toBe(1);
       expect(tzRes.body.data[0].displayName).toBe('Pythonista');
+    });
+
+    it('paginates candidates stably across multiple pages without duplicates', async () => {
+      const hackathon = await createTestHackathon();
+      const db = getDatabase();
+
+      const candidateIds: string[] = [];
+      const baseTime = Date.now();
+      for (let i = 0; i < 25; i++) {
+        const u = await createTestUser({ displayName: `Batch Candidate ${i}` });
+        await db.collection('users').updateOne(
+          { _id: u._id },
+          {
+            $set: {
+              discoverable: true,
+              skills: ['typescript'],
+              updatedAt: new Date(baseTime - i * 1000)
+            }
+          }
+        );
+        candidateIds.push(u._id.toHexString());
+      }
+
+      const viewer = await createTestUser();
+      await db.collection('users').updateOne({ _id: viewer._id }, { $set: { discoverable: false } });
+      const { sessionCookie } = await createTestSession(viewer._id);
+
+      // Page 1: limit 10
+      const page1 = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?limit=10`)
+        .set('Cookie', sessionCookie);
+
+      expect(page1.status).toBe(200);
+      expect(page1.body.data.length).toBe(10);
+      expect(page1.body.meta.hasMore).toBe(true);
+      expect(page1.body.meta.nextCursor).toBeDefined();
+
+      // Page 2: limit 10 using nextCursor
+      const page2 = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?limit=10&cursor=${page1.body.meta.nextCursor}`)
+        .set('Cookie', sessionCookie);
+
+      expect(page2.status).toBe(200);
+      expect(page2.body.data.length).toBe(10);
+      expect(page2.body.meta.hasMore).toBe(true);
+      expect(page2.body.meta.nextCursor).toBeDefined();
+
+      // Page 3: limit 10 using page2 nextCursor (remaining 5)
+      const page3 = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?limit=10&cursor=${page2.body.meta.nextCursor}`)
+        .set('Cookie', sessionCookie);
+
+      expect(page3.status).toBe(200);
+      expect(page3.body.data.length).toBe(5);
+      expect(page3.body.meta.hasMore).toBe(false);
+      expect(page3.body.meta.nextCursor).toBeNull();
+
+      // Verify zero duplicates across all three pages
+      const ids1 = page1.body.data.map((c: any) => c.id);
+      const ids2 = page2.body.data.map((c: any) => c.id);
+      const ids3 = page3.body.data.map((c: any) => c.id);
+
+      const allFetched = [...ids1, ...ids2, ...ids3];
+      expect(new Set(allFetched).size).toBe(25);
+    });
+
+    it('rejects malformed or corrupted pagination cursors with 400 VALIDATION_FAILED', async () => {
+      const hackathon = await createTestHackathon();
+      const db = getDatabase();
+      const viewer = await createTestUser();
+      await db.collection('users').updateOne({ _id: viewer._id }, { $set: { discoverable: false } });
+      const { sessionCookie } = await createTestSession(viewer._id);
+
+      // 1. Random non-base64 or invalid json
+      const res1 = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?cursor=invalid_not_base64_!@#`)
+        .set('Cookie', sessionCookie);
+
+      expect(res1.status).toBe(400);
+      expect(res1.body.error.code).toBe('VALIDATION_FAILED');
+
+      // 2. Base64 encoded but not valid json
+      const res2 = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?cursor=${Buffer.from('not json').toString('base64url')}`)
+        .set('Cookie', sessionCookie);
+
+      expect(res2.status).toBe(400);
+      expect(res2.body.error.code).toBe('VALIDATION_FAILED');
+
+      // 3. Base64 json with missing fields
+      const res3 = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates?cursor=${Buffer.from(JSON.stringify({ u: 'bad' })).toString('base64url')}`)
+        .set('Cookie', sessionCookie);
+
+      expect(res3.status).toBe(400);
+      expect(res3.body.error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('preserves cross-hackathon eligibility: assigned in Hackathon B remains eligible in Hackathon A', async () => {
+      const hackathonA = await createTestHackathon();
+      const hackathonB = await createTestHackathon();
+      const db = getDatabase();
+
+      // Candidate User
+      const candidate = await createTestUser({ displayName: 'Cross Event User' });
+      await db.collection('users').updateOne(
+        { _id: candidate._id },
+        { $set: { discoverable: true, skills: ['docker'] } }
+      );
+
+      // User creates and joins a team in Hackathon B
+      const { sessionCookie: candCookie, csrfToken: candCsrf } = await createTestSession(candidate._id);
+      await request(app)
+        .post(`/api/v1/hackathons/${hackathonB._id.toHexString()}/teams`)
+        .set('Cookie', candCookie)
+        .set('X-CSRF-Token', candCsrf)
+        .send({ name: 'Team Hackathon B', minSize: 2, maxSize: 4 });
+
+      // Viewer checks candidate board for Hackathon A
+      const { sessionCookie: viewerCookie } = await createTestSession((await createTestUser())._id);
+      const resA = await request(app)
+        .get(`/api/v1/hackathons/${hackathonA._id.toHexString()}/teammates`)
+        .set('Cookie', viewerCookie);
+
+      expect(resA.status).toBe(200);
+      const userIdsA = resA.body.data.map((c: any) => c.id);
+      expect(userIdsA).toContain(candidate._id.toHexString());
+
+      // But in Hackathon B, candidate is assigned and must NOT appear
+      const resB = await request(app)
+        .get(`/api/v1/hackathons/${hackathonB._id.toHexString()}/teammates`)
+        .set('Cookie', viewerCookie);
+
+      expect(resB.status).toBe(200);
+      const userIdsB = resB.body.data.map((c: any) => c.id);
+      expect(userIdsB).not.toContain(candidate._id.toHexString());
+    });
+
+    it('ensures private profile fields (email, passwordHash) are never leaked in candidate responses', async () => {
+      const hackathon = await createTestHackathon();
+      const db = getDatabase();
+
+      const user = await createTestUser({ displayName: 'Private Candidate' });
+      await db.collection('users').updateOne(
+        { _id: user._id },
+        { $set: { discoverable: true, skills: ['security'] } }
+      );
+
+      const viewer = await createTestUser();
+      await db.collection('users').updateOne({ _id: viewer._id }, { $set: { discoverable: false } });
+      const { sessionCookie } = await createTestSession(viewer._id);
+      const res = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates`)
+        .set('Cookie', sessionCookie);
+
+      expect(res.status).toBe(200);
+      const cand = res.body.data.find((c: any) => c.id === user._id.toHexString());
+      expect(cand).toBeDefined();
+      expect(cand.displayName).toBe('Private Candidate');
+      expect(cand.email).toBeUndefined();
+      expect(cand.emailNormalized).toBeUndefined();
+      expect(cand.passwordHash).toBeUndefined();
+    });
+
+    it('stably sorts candidates with identical timestamps using _id tie-breaking', async () => {
+      const hackathon = await createTestHackathon();
+      const db = getDatabase();
+
+      const sameDate = new Date('2026-06-01T12:00:00Z');
+      const u1 = await createTestUser({ displayName: 'Tie Candidate 1' });
+      const u2 = await createTestUser({ displayName: 'Tie Candidate 2' });
+      const u3 = await createTestUser({ displayName: 'Tie Candidate 3' });
+
+      await db.collection('users').updateMany(
+        { _id: { $in: [u1._id, u2._id, u3._id] } },
+        { $set: { discoverable: true, updatedAt: sameDate } }
+      );
+
+      const viewer = await createTestUser();
+      await db.collection('users').updateOne({ _id: viewer._id }, { $set: { discoverable: false } });
+      const { sessionCookie } = await createTestSession(viewer._id);
+      const res = await request(app)
+        .get(`/api/v1/hackathons/${hackathon._id.toHexString()}/teammates`)
+        .set('Cookie', sessionCookie);
+
+      expect(res.status).toBe(200);
+      const ids = res.body.data.map((c: any) => c.id);
+      const index1 = ids.indexOf(u1._id.toHexString());
+      const index2 = ids.indexOf(u2._id.toHexString());
+      const index3 = ids.indexOf(u3._id.toHexString());
+
+      expect(index1).toBeGreaterThanOrEqual(0);
+      expect(index2).toBeGreaterThanOrEqual(0);
+      expect(index3).toBeGreaterThanOrEqual(0);
+
+      // Verify descending _id ordering when updatedAt is identical
+      const tieUsers = [u1, u2, u3].sort((a, b) => b._id.toString().localeCompare(a._id.toString()));
+      expect(ids[Math.min(index1, index2, index3)]).toBe(tieUsers[0]._id.toHexString());
     });
   });
 });

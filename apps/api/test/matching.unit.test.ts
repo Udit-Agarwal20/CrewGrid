@@ -208,6 +208,77 @@ describe('Checkpoint M3-B: Teammate Recommendation & Matching Tests', () => {
       const userIds = suggRes.body.data.map((s: any) => s.userId);
       expect(userIds).not.toContain(otherLeader._id.toHexString());
     });
+
+    it('C05 reproduction: excludes the best candidate when placed beyond first 100 database results', async () => {
+      const hackathon = await createTestHackathon({ minTeamSize: 2, maxTeamSize: 5 });
+      const leader = await createTestUser({ displayName: 'Leader Carol' });
+      const { sessionCookie: leaderCookie, csrfToken: leaderCsrf } = await createTestSession(leader._id);
+
+      const db = getDatabase();
+      await db.collection('users').updateOne(
+        { _id: leader._id },
+        { $set: { skills: ['python'], timezone: 'UTC', discoverable: true } }
+      );
+
+      const createRes = await request(app)
+        .post(`/api/v1/hackathons/${hackathon._id.toHexString()}/teams`)
+        .set('Cookie', leaderCookie)
+        .set('X-CSRF-Token', leaderCsrf)
+        .send({
+          name: 'Solidity Core',
+          minSize: 2,
+          maxSize: 5,
+          requiredSkills: ['rust', 'solidity']
+        });
+
+      const teamId = createRes.body.data.id;
+
+      // Seed 149 low-scoring candidates with newer updatedAt
+      const now = Date.now();
+      const lowScoringUsers = [];
+      for (let i = 0; i < 149; i++) {
+        lowScoringUsers.push({
+          email: `candidate_${i}@example.com`,
+          emailNormalized: `candidate_${i}@example.com`,
+          passwordHash: 'dummy',
+          displayName: `Low Candidate ${i}`,
+          handleNormalized: `low_cand_${i}`,
+          skills: ['c++'],
+          timezone: 'Pacific/Honolulu',
+          discoverable: true,
+          createdAt: new Date(now - i * 1000),
+          updatedAt: new Date(now - i * 1000)
+        });
+      }
+      await db.collection('users').insertMany(lowScoringUsers);
+
+      // Seed the 150th candidate who is a perfect match (100% score) but has an older updatedAt
+      const perfectCandidate = {
+        email: 'perfect@example.com',
+        emailNormalized: 'perfect@example.com',
+        passwordHash: 'dummy',
+        displayName: 'Perfect Match Candidate',
+        handleNormalized: 'perfect_match',
+        skills: ['rust', 'solidity'],
+        timezone: 'UTC',
+        discoverable: true,
+        createdAt: new Date(now - 300000),
+        updatedAt: new Date(now - 300000)
+      };
+      const insertResult = await db.collection('users').insertOne(perfectCandidate);
+      const perfectId = insertResult.insertedId.toHexString();
+
+      const suggRes = await request(app)
+        .get(`/api/v1/teams/${teamId}/suggestions`)
+        .set('Cookie', leaderCookie);
+
+      expect(suggRes.status).toBe(200);
+      const userIds = suggRes.body.data.map((s: any) => s.userId);
+      // Demonstrates defect: perfect candidate is excluded because .limit(100) stopped after the first 100 low-scoring candidates!
+      expect(userIds).toContain(perfectId);
+      expect(suggRes.body.data[0].userId).toBe(perfectId);
+      expect(suggRes.body.data[0].score).toBe(100);
+    });
   });
 });
 

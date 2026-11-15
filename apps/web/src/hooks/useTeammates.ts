@@ -18,7 +18,7 @@ export function useTeammates(hackathonId: string | undefined, filters: TeammateF
   if (filters.cursor) params.set('cursor', filters.cursor);
 
   return useQuery({
-    queryKey: ['teammates', hackathonId, filters.skill, filters.timezone, filters.cursor],
+    queryKey: ['teammates', hackathonId, filters.skill, filters.timezone, filters.limit, filters.cursor],
     queryFn: async () => {
       if (!isValidObjectId(hackathonId)) return { data: [], meta: { requestId: 'none', nextCursor: null, hasMore: false } };
       return apiFetch<PublicUser[]>(`/api/v1/hackathons/${hackathonId}/teammates?${params.toString()}`);

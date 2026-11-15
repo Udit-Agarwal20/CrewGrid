@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import {
   Users,
@@ -6,7 +6,9 @@ import {
   Sparkles,
   Link2,
   ArrowLeft,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useMyTeam } from '../hooks/useTeams';
@@ -43,8 +45,21 @@ export function TeammateDiscovery() {
 
   const [activeTab, setActiveTab] = useState<'all' | 'suggestions'>('all');
   const [skillFilter, setSkillFilter] = useState('');
+  const [debouncedSkill, setDebouncedSkill] = useState('');
   const [selectedTimezone, setSelectedTimezone] = useState('All Timezones');
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [selectedTeamForInvite, setSelectedTeamForInvite] = useState<string | null>(null);
+
+  // Debounce skill search by 250ms to prevent query spamming
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSkill(skillFilter.trim());
+      setCursor(undefined);
+      setCursorHistory([]);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [skillFilter]);
 
   const timezoneParam = selectedTimezone === 'All Timezones' ? undefined : selectedTimezone;
 
@@ -54,9 +69,10 @@ export function TeammateDiscovery() {
     error: candidateError,
     refetch: refetchCandidates
   } = useTeammates(validHackathonId, {
-    skill: skillFilter.trim() || undefined,
+    skill: debouncedSkill || undefined,
     timezone: timezoneParam,
-    limit: 50
+    cursor,
+    limit: 12
   });
 
   const {
@@ -65,6 +81,22 @@ export function TeammateDiscovery() {
   } = useTeamSuggestions(isLeader ? myTeam?.id : undefined);
 
   const candidates = candidateResult?.data || [];
+  const meta = candidateResult?.meta;
+
+  const handleNextPage = () => {
+    if (meta?.nextCursor) {
+      setCursorHistory((prev) => [...prev, cursor || '']);
+      setCursor(meta.nextCursor);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (cursorHistory.length > 0) {
+      const prevCursor = cursorHistory[cursorHistory.length - 1];
+      setCursorHistory((prev) => prev.slice(0, -1));
+      setCursor(prevCursor === '' ? undefined : prevCursor);
+    }
+  };
 
   if (hackathonId === 'default') {
     return (
@@ -186,7 +218,11 @@ export function TeammateDiscovery() {
                 <select
                   id="candidate-timezone-filter"
                   value={selectedTimezone}
-                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedTimezone(e.target.value);
+                    setCursor(undefined);
+                    setCursorHistory([]);
+                  }}
                   className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                 >
                   {COMMON_TIMEZONES.map((tz) => (
@@ -203,7 +239,10 @@ export function TeammateDiscovery() {
                     type="button"
                     onClick={() => {
                       setSkillFilter('');
+                      setDebouncedSkill('');
                       setSelectedTimezone('All Timezones');
+                      setCursor(undefined);
+                      setCursorHistory([]);
                     }}
                     className="text-xs font-mono text-[#9BF5CC] hover:underline focus-visible:ring-2 focus-visible:ring-[#9BF5CC] rounded p-1"
                   >
@@ -235,14 +274,46 @@ export function TeammateDiscovery() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {candidates.map((cand) => (
-                  <CandidateCard
-                    key={cand.id}
-                    user={cand}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {candidates.map((cand) => (
+                    <CandidateCard
+                      key={cand.id}
+                      user={cand}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between mt-8 pt-4 border-t border-[#35405A]">
+                  <button
+                    type="button"
+                    onClick={handlePrevPage}
+                    disabled={cursorHistory.length === 0}
+                    aria-label="Previous page of candidates"
+                    className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </button>
+
+                  <span className="text-xs font-mono text-[#B5C1D4]">
+                    Page {cursorHistory.length + 1}
+                    {candidates.length > 0 ? ` (Showing ${candidates.length} candidates)` : ''}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleNextPage}
+                    disabled={!meta?.hasMore}
+                    aria-label="Next page of candidates"
+                    className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -289,7 +360,7 @@ export function TeammateDiscovery() {
                           {suggestion.displayName}
                         </h3>
                         <span className="text-xs font-mono text-[#9BF5CC]">
-                          Match Score: {Math.round(suggestion.score * 100)}%
+                          Match Score: {Math.round(suggestion.score)}%
                         </span>
                       </div>
                     </div>

@@ -7,7 +7,8 @@ import { validateRequest } from '../../middleware/validation.js';
 import {
   ObjectIdSchema,
   TeammatesQuerySchema,
-  SuccessEnvelope
+  SuccessEnvelope,
+  AppError
 } from '@crewgrid/contracts';
 
 const HackathonParamSchema = z.object({
@@ -21,16 +22,21 @@ const TeamParamSchema = z.object({
 const toId = (param: string | string[]): ObjectId => new ObjectId(Array.isArray(param) ? param[0]! : param);
 
 function decodeCursor(cursor?: string): { updatedAt: Date; id: ObjectId } | undefined {
-  if (!cursor) return undefined;
+  if (!cursor || cursor.trim() === '') return undefined;
   try {
     const str = Buffer.from(cursor, 'base64url').toString('utf8');
     const parsed = JSON.parse(str);
-    if (!parsed.u || !parsed.id || !ObjectId.isValid(parsed.id)) return undefined;
+    if (!parsed || typeof parsed !== 'object' || !parsed.u || !parsed.id || !ObjectId.isValid(parsed.id)) {
+      throw new AppError(400, 'VALIDATION_FAILED', 'Malformed pagination cursor: missing or invalid cursor fields');
+    }
     const date = new Date(parsed.u);
-    if (isNaN(date.getTime())) return undefined;
+    if (isNaN(date.getTime())) {
+      throw new AppError(400, 'VALIDATION_FAILED', 'Malformed pagination cursor: invalid timestamp');
+    }
     return { updatedAt: date, id: new ObjectId(parsed.id) };
-  } catch {
-    return undefined;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(400, 'VALIDATION_FAILED', 'Malformed pagination cursor: failed to decode');
   }
 }
 

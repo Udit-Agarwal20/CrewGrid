@@ -88,37 +88,71 @@ export class MatchingService {
   }): Promise<{ candidates: PublicUser[]; hasMore: boolean; nextCursor: string | null }> {
     const { hackathonId, skill, timezone, cursor, limit } = params;
 
-    // Find all users already assigned to a team in this hackathon
-    const assignedUserIds = await this.db
-      .collection('memberships')
-      .distinct('userId', { hackathonId });
-
-    const filter: any = {
-      _id: { $nin: assignedUserIds },
+    const matchStage: any = {
       discoverable: true
     };
 
     if (skill) {
       const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.skills = { $elemMatch: { $regex: `^${escaped}$`, $options: 'i' } };
+      matchStage.skills = { $elemMatch: { $regex: `^${escaped}$`, $options: 'i' } };
     }
 
     if (timezone) {
-      filter.timezone = timezone;
+      matchStage.timezone = timezone;
     }
 
     if (cursor) {
-      filter.$or = [
+      matchStage.$or = [
         { updatedAt: { $lt: cursor.updatedAt } },
         { updatedAt: cursor.updatedAt, _id: { $lt: cursor.id } }
       ];
     }
 
+    // C06: Use an indexed $lookup anti-join instead of pulling all assigned user IDs into memory
+    const pipeline: any[] = [
+      { $match: matchStage },
+      { $sort: { updatedAt: -1, _id: -1 } },
+      {
+        $lookup: {
+          from: 'memberships',
+          let: { uid: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$hackathonId', hackathonId] },
+                    { $eq: ['$userId', '$$uid'] }
+                  ]
+                }
+              }
+            },
+            { $project: { _id: 1 } },
+            { $limit: 1 }
+          ],
+          as: 'membership'
+        }
+      },
+      { $match: { membership: { $size: 0 } } },
+      {
+        $project: {
+          _id: 1,
+          displayName: 1,
+          handleNormalized: 1,
+          bio: 1,
+          skills: 1,
+          timezone: 1,
+          preferredHours: 1,
+          discoverable: 1,
+          updatedAt: 1
+        }
+      },
+      { $limit: limit + 1 }
+    ];
+
     const docs = await this.db
       .collection<UserDocument>('users')
-      .find(filter)
-      .sort({ updatedAt: -1, _id: -1 })
-      .limit(limit + 1)
+      .aggregate<UserDocument>(pipeline)
       .toArray();
 
     const hasMore = docs.length > limit;
@@ -177,19 +211,125 @@ export class MatchingService {
     const requiredSkills = team.requiredSkills || [];
     const missingSkills = requiredSkills.filter((r) => !teamSkillSet.has(r.toLowerCase()));
 
-    // 2. Query eligible candidates (discoverable, not in any team for this hackathon)
-    const assignedUserIds = await this.db
-      .collection('memberships')
-      .distinct('userId', { hackathonId: team.hackathonId });
+    // 2. Query eligible candidates (C05 & C06: complete, scalable, projected candidate retrieval with $lookup anti-join)
+    const candidateMap = new Map<string, UserDocument>();
 
-    const candidates = await this.db
-      .collection<UserDocument>('users')
-      .find({
-        _id: { $nin: assignedUserIds },
+    if (missingSkills.length > 0) {
+      // Prioritize candidates covering at least one missing skill via multikey index
+      const skillRegexes = missingSkills.map(
+        (s) => new RegExp(`^${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+      );
+
+      const skillPipeline: any[] = [
+        {
+          $match: {
+            discoverable: true,
+            skills: { $in: skillRegexes }
+          }
+        },
+        { $sort: { updatedAt: -1, _id: -1 } },
+        {
+          $lookup: {
+            from: 'memberships',
+            let: { uid: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$hackathonId', team.hackathonId] },
+                      { $eq: ['$userId', '$$uid'] }
+                    ]
+                  }
+                }
+              },
+              { $project: { _id: 1 } },
+              { $limit: 1 }
+            ],
+            as: 'm'
+          }
+        },
+        { $match: { m: { $size: 0 } } },
+        {
+          $project: {
+            _id: 1,
+            displayName: 1,
+            skills: 1,
+            timezone: 1,
+            preferredHours: 1
+          }
+        },
+        { $limit: 300 }
+      ];
+
+      const skillCandidates = await this.db
+        .collection<UserDocument>('users')
+        .aggregate<UserDocument>(skillPipeline)
+        .toArray();
+
+      for (const cand of skillCandidates) {
+        candidateMap.set(cand._id.toHexString(), cand);
+      }
+    }
+
+    // If we have fewer than 20 candidates (or if missingSkills is empty), retrieve general candidates
+    if (candidateMap.size < 20) {
+      const excludedIds = Array.from(candidateMap.values()).map((c) => c._id);
+      const generalMatch: any = {
         discoverable: true
-      })
-      .limit(100)
-      .toArray();
+      };
+      if (excludedIds.length > 0) {
+        generalMatch._id = { $nin: excludedIds };
+      }
+
+      const generalPipeline: any[] = [
+        { $match: generalMatch },
+        { $sort: { updatedAt: -1, _id: -1 } },
+        {
+          $lookup: {
+            from: 'memberships',
+            let: { uid: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$hackathonId', team.hackathonId] },
+                      { $eq: ['$userId', '$$uid'] }
+                    ]
+                  }
+                }
+              },
+              { $project: { _id: 1 } },
+              { $limit: 1 }
+            ],
+            as: 'm'
+          }
+        },
+        { $match: { m: { $size: 0 } } },
+        {
+          $project: {
+            _id: 1,
+            displayName: 1,
+            skills: 1,
+            timezone: 1,
+            preferredHours: 1
+          }
+        },
+        { $limit: 300 - candidateMap.size }
+      ];
+
+      const generalCandidates = await this.db
+        .collection<UserDocument>('users')
+        .aggregate<UserDocument>(generalPipeline)
+        .toArray();
+
+      for (const cand of generalCandidates) {
+        candidateMap.set(cand._id.toHexString(), cand);
+      }
+    }
+
+    const candidates = Array.from(candidateMap.values());
 
     // 3. Compute score and reasons for each candidate
     const suggestions: Suggestion[] = [];
