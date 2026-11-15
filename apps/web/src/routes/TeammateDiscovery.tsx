@@ -16,7 +16,7 @@ import { useTeammates, useTeamSuggestions } from '../hooks/useTeammates';
 import { AppShell } from '../components/common/AppShell';
 import { PageHeader } from '../components/common/PageHeader';
 import { CandidateCard } from '../components/matching/CandidateCard';
-import { ScoreBreakdown } from '../components/matching/ScoreBreakdown';
+import { SuggestionCard } from '../components/matching/SuggestionCard';
 import { SkeletonCard } from '../components/common/SkeletonCard';
 import { ErrorPanel } from '../components/common/ErrorPanel';
 import { InviteModal } from '../components/invites/InviteModal';
@@ -60,6 +60,12 @@ export function TeammateDiscovery() {
     }, 250);
     return () => clearTimeout(timer);
   }, [skillFilter]);
+
+  // Reset pagination state when switching hackathons (Finding C)
+  useEffect(() => {
+    setCursor(undefined);
+    setCursorHistory([]);
+  }, [validHackathonId]);
 
   const timezoneParam = selectedTimezone === 'All Timezones' ? undefined : selectedTimezone;
 
@@ -350,23 +356,10 @@ export function TeammateDiscovery() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {suggestions.map((suggestion) => (
-                  <div
+                  <SuggestionCard
                     key={suggestion.userId}
-                    className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A] space-y-4 hover:border-[#9BF5CC]/30 transition"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-bold text-base text-[#E9EDF5]">
-                          {suggestion.displayName}
-                        </h3>
-                        <span className="text-xs font-mono text-[#9BF5CC]">
-                          Match Score: {Math.round(suggestion.score)}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <ScoreBreakdown suggestion={suggestion} />
-                  </div>
+                    suggestion={suggestion}
+                  />
                 ))}
               </div>
             )}

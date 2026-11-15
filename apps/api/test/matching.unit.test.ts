@@ -279,6 +279,162 @@ describe('Checkpoint M3-B: Teammate Recommendation & Matching Tests', () => {
       expect(suggRes.body.data[0].userId).toBe(perfectId);
       expect(suggRes.body.data[0].score).toBe(100);
     });
+
+    it('Finding A reproduction: candidate placed beyond first 300 database results is excluded due to $limit: 300', async () => {
+      const hackathon = await createTestHackathon({ minTeamSize: 2, maxTeamSize: 5 });
+      const leader = await createTestUser({ displayName: 'Leader David' });
+      const { sessionCookie: leaderCookie, csrfToken: leaderCsrf } = await createTestSession(leader._id);
+
+      const db = getDatabase();
+      await db.collection('users').updateOne(
+        { _id: leader._id },
+        { $set: { skills: ['python'], timezone: 'UTC', discoverable: true } }
+      );
+
+      const createRes = await request(app)
+        .post(`/api/v1/hackathons/${hackathon._id.toHexString()}/teams`)
+        .set('Cookie', leaderCookie)
+        .set('X-CSRF-Token', leaderCsrf)
+        .send({
+          name: 'Solidity Large Squad',
+          minSize: 2,
+          maxSize: 5,
+          requiredSkills: ['rust', 'solidity']
+        });
+
+      const teamId = createRes.body.data.id;
+
+      // Seed 349 candidates who have 1 skill ('rust') but opposite timezone ('Pacific/Honolulu') -> score = 35%
+      const now = Date.now();
+      const partialCandidates = [];
+      for (let i = 0; i < 349; i++) {
+        partialCandidates.push({
+          email: `partial_${i}@example.com`,
+          emailNormalized: `partial_${i}@example.com`,
+          passwordHash: 'dummy',
+          displayName: `Partial Candidate ${i}`,
+          handleNormalized: `partial_cand_${i}`,
+          skills: ['rust'],
+          timezone: 'Pacific/Honolulu',
+          discoverable: true,
+          createdAt: new Date(now - i * 1000),
+          updatedAt: new Date(now - i * 1000)
+        });
+      }
+      await db.collection('users').insertMany(partialCandidates);
+
+      // Seed the 350th candidate who is a perfect match ('rust', 'solidity', 'UTC') -> score = 100%
+      // Has an older updatedAt so it is ranked at row 350 in { updatedAt: -1, _id: -1 }
+      const championCandidate = {
+        email: 'champion@example.com',
+        emailNormalized: 'champion@example.com',
+        passwordHash: 'dummy',
+        displayName: 'Champion Candidate',
+        handleNormalized: 'champion_cand',
+        skills: ['rust', 'solidity'],
+        timezone: 'UTC',
+        discoverable: true,
+        createdAt: new Date(now - 400000),
+        updatedAt: new Date(now - 400000)
+      };
+      const insertResult = await db.collection('users').insertOne(championCandidate);
+      const championId = insertResult.insertedId.toHexString();
+
+      const suggRes = await request(app)
+        .get(`/api/v1/teams/${teamId}/suggestions`)
+        .set('Cookie', leaderCookie);
+
+      expect(suggRes.status).toBe(200);
+      const userIds = suggRes.body.data.map((s: any) => s.userId);
+      // With $limit: 300, candidate 350 is omitted!
+      // When fixed with complete streaming evaluation, championId MUST be present and rank #1!
+      expect(userIds).toContain(championId);
+      expect(suggRes.body.data[0].userId).toBe(championId);
+      expect(suggRes.body.data[0].score).toBe(100);
+    });
+
+    it('Finding B reproduction: candidate with 0 matching skills but 100% timezone fit (score 30%) is excluded because 20+ candidates match 1 skill with score ~7%', async () => {
+      const hackathon = await createTestHackathon({ minTeamSize: 2, maxTeamSize: 5 });
+      const leader = await createTestUser({ displayName: 'Leader Elena' });
+      const { sessionCookie: leaderCookie, csrfToken: leaderCsrf } = await createTestSession(leader._id);
+
+      const db = getDatabase();
+      await db.collection('users').updateOne(
+        { _id: leader._id },
+        { $set: { skills: ['python'], timezone: 'UTC', discoverable: true } }
+      );
+
+      // Team has 10 missing required skills
+      const missing10 = [
+        'skill_1', 'skill_2', 'skill_3', 'skill_4', 'skill_5',
+        'skill_6', 'skill_7', 'skill_8', 'skill_9', 'skill_10'
+      ];
+
+      const createRes = await request(app)
+        .post(`/api/v1/hackathons/${hackathon._id.toHexString()}/teams`)
+        .set('Cookie', leaderCookie)
+        .set('X-CSRF-Token', leaderCsrf)
+        .send({
+          name: 'Ten Skills Squad',
+          minSize: 2,
+          maxSize: 5,
+          requiredSkills: missing10
+        });
+
+      const teamId = createRes.body.data.id;
+
+      // Seed 25 candidates who each match skill_1 only and have opposite timezone Pacific/Honolulu
+      // CompSkills = 1/10 = 10%. TimezoneFit = 0%.
+      // Overall score = round(0.7 * 10 + 0) = 7%.
+      const now = Date.now();
+      const sevenPercentCandidates = [];
+      for (let i = 0; i < 25; i++) {
+        sevenPercentCandidates.push({
+          email: `seven_pct_${i}@example.com`,
+          emailNormalized: `seven_pct_${i}@example.com`,
+          passwordHash: 'dummy',
+          displayName: `Seven Pct ${i}`,
+          handleNormalized: `seven_pct_${i}`,
+          skills: ['skill_1'],
+          timezone: 'Pacific/Honolulu',
+          discoverable: true,
+          createdAt: new Date(now - i * 1000),
+          updatedAt: new Date(now - i * 1000)
+        });
+      }
+      await db.collection('users').insertMany(sevenPercentCandidates);
+
+      // Seed 1 candidate with NO missing skills, but 100% timezone fit (UTC, 9h overlap >= 4h)
+      // CompSkills = 0%. TimezoneFit = 100%.
+      // Overall score = round(0.7 * 0 + 0.3 * 100) = 30%.
+      const thirtyPercentCandidate = {
+        email: 'thirty_pct@example.com',
+        emailNormalized: 'thirty_pct@example.com',
+        passwordHash: 'dummy',
+        displayName: 'Thirty Percent Timezone Winner',
+        handleNormalized: 'thirty_pct_winner',
+        skills: ['irrelevant_skill'],
+        timezone: 'UTC',
+        discoverable: true,
+        createdAt: new Date(now - 30000),
+        updatedAt: new Date(now - 30000)
+      };
+      const insertResult = await db.collection('users').insertOne(thirtyPercentCandidate);
+      const winnerId = insertResult.insertedId.toHexString();
+
+      const suggRes = await request(app)
+        .get(`/api/v1/teams/${teamId}/suggestions`)
+        .set('Cookie', leaderCookie);
+
+      expect(suggRes.status).toBe(200);
+      const userIds = suggRes.body.data.map((s: any) => s.userId);
+      // Because candidateMap.size was 25 >= 20, the general pool was skipped,
+      // and the 30% timezone candidate was completely excluded while 7% candidates were returned!
+      // In the correct implementation, the 30% candidate MUST be ranked #1 above all 7% candidates!
+      expect(userIds).toContain(winnerId);
+      expect(suggRes.body.data[0].userId).toBe(winnerId);
+      expect(suggRes.body.data[0].score).toBe(30);
+    });
   });
 });
 
