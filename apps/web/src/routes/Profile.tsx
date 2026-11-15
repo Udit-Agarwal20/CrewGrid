@@ -142,24 +142,26 @@ export function Profile() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                  <label htmlFor="profile-display-name" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                     Display Name *
                   </label>
                   <input
+                    id="profile-display-name"
                     type="text"
                     required
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     maxLength={80}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                  <label htmlFor="profile-handle" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                     Handle
                   </label>
                   <input
+                    id="profile-handle"
                     type="text"
                     disabled
                     value={profile?.handle ? `@${profile.handle}` : 'No handle set'}
@@ -169,18 +171,19 @@ export function Profile() {
               </div>
 
               <div>
-                <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                <label htmlFor="profile-bio" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                   Bio
                 </label>
                 <textarea
+                  id="profile-bio"
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   maxLength={280}
                   rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition resize-none"
                   placeholder="Tell potential teammates about your experience, past hackathons, and what you enjoy building..."
                 />
-                <span className="text-[11px] font-mono text-[#B5C1D4]/60 block text-right mt-1">
+                <span className="text-[11px] font-mono text-[#B5C1D4] block text-right mt-1">
                   {bio.length} / 280 characters
                 </span>
               </div>
@@ -195,11 +198,12 @@ export function Profile() {
 
               {/* Skills Tag Input */}
               <div>
-                <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                <label htmlFor="profile-skill-input" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                   Skills (Max 12)
                 </label>
                 <div className="flex gap-2 mb-3">
                   <input
+                    id="profile-skill-input"
                     type="text"
                     value={skillInput}
                     onChange={(e) => setSkillInput(e.target.value)}
@@ -210,12 +214,14 @@ export function Profile() {
                       }
                     }}
                     placeholder="e.g. react, typescript, mongodb, python, rust"
-                    className="flex-1 px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                    aria-label="Add skill to profile"
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                   />
                   <button
                     type="button"
                     onClick={() => handleAddSkill()}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-1 transition"
+                    aria-label="Add skill button"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC] flex items-center gap-1 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add
@@ -224,7 +230,7 @@ export function Profile() {
 
                 <div className="flex flex-wrap gap-2 min-h-8 p-3 rounded-xl bg-[#0B1020] border border-[#35405A]">
                   {skills.length === 0 ? (
-                    <span className="text-xs text-[#B5C1D4]/50 italic">No skills added yet.</span>
+                    <span className="text-xs text-[#B5C1D4] italic">No skills added yet.</span>
                   ) : (
                     skills.map((skill) => (
                       <SkillPill
@@ -240,13 +246,14 @@ export function Profile() {
               {/* Timezone & Working Hours */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                  <label htmlFor="profile-timezone" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                     Timezone
                   </label>
                   <select
+                    id="profile-timezone"
                     value={timezone}
                     onChange={(e) => setTimezone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                   >
                     {TIMEZONE_OPTIONS.map((tz) => (
                       <option key={tz} value={tz}>
@@ -257,26 +264,28 @@ export function Profile() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                  <label htmlFor="profile-start-time" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                     Active Hours Start
                   </label>
                   <input
+                    id="profile-start-time"
                     type="time"
                     value={startLocal}
                     onChange={(e) => setStartLocal(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
+                  <label htmlFor="profile-end-time" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1.5">
                     Active Hours End
                   </label>
                   <input
+                    id="profile-end-time"
                     type="time"
                     value={endLocal}
                     onChange={(e) => setEndLocal(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
                   />
                 </div>
               </div>
@@ -289,8 +298,9 @@ export function Profile() {
                 Privacy & Discoverability
               </h2>
 
-              <label className="flex items-start gap-3.5 p-4 rounded-xl bg-[#222A42]/50 border border-[#35405A] cursor-pointer hover:border-[#9BF5CC]/40 transition">
+              <label htmlFor="profile-discoverable-toggle" className="flex items-start gap-3.5 p-4 rounded-xl bg-[#222A42]/50 border border-[#35405A] cursor-pointer hover:border-[#9BF5CC]/40 transition">
                 <input
+                  id="profile-discoverable-toggle"
                   type="checkbox"
                   checked={isDiscoverable}
                   onChange={(e) => setIsDiscoverable(e.target.checked)}
@@ -317,7 +327,7 @@ export function Profile() {
               <button
                 type="submit"
                 disabled={updateProfileMutation.isPending}
-                className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition flex items-center gap-2 disabled:opacity-50 shadow-lg"
+                className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition flex items-center gap-2 disabled:opacity-50 shadow-lg"
               >
                 {updateProfileMutation.isPending ? (
                   <>

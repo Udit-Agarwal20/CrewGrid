@@ -33,6 +33,9 @@ export function LiveConnectionStatus({ status, lastActivity, className = '' }: L
 
   return (
     <div
+      role="status"
+      aria-live="polite"
+      aria-label={`Real-time connection status: ${current.label}`}
       className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#171E31] border border-[#35405A] text-xs font-mono ${className}`}
       title={lastActivity ? `Last event: ${lastActivity.toLocaleTimeString()}` : 'SSE real-time stream status'}
     >

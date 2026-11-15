@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router';
 import { Search, Filter, Plus, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { AppShell } from '../components/common/AppShell';
@@ -8,9 +8,9 @@ import { SkeletonCard } from '../components/common/SkeletonCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorPanel } from '../components/common/ErrorPanel';
 import { CreateTeamModal } from '../components/teams/CreateTeamModal';
+import { JoinRequestModal } from '../components/requests/JoinRequestModal';
 import { useTeamBoard, useMyTeam } from '../hooks/useTeams';
-import { useMyRequests, useCreateJoinRequest } from '../hooks/useRequests';
-import { useToast } from '../context/ToastContext';
+import { useMyRequests } from '../hooks/useRequests';
 import { TeamResponse } from '@crewgrid/contracts';
 import { isValidObjectId } from '../utils/validation';
 
@@ -24,14 +24,11 @@ export function TeamDiscovery() {
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [joinModalTeam, setJoinModalTeam] = useState<TeamResponse | null>(null);
-  const [joinMessage, setJoinMessage] = useState('');
 
   const validHackathonId = isValidObjectId(hackathonId) ? hackathonId : undefined;
 
   const { data: myTeam } = useMyTeam(validHackathonId);
   const { data: myRequests = [] } = useMyRequests();
-  const createJoinRequestMutation = useCreateJoinRequest();
-  const { success, error: toastError } = useToast();
 
   const {
     data: boardData,
@@ -66,23 +63,6 @@ export function TeamDiscovery() {
       const prevCursor = cursorHistory[cursorHistory.length - 1];
       setCursorHistory((prev) => prev.slice(0, -1));
       setCursor(prevCursor === '' ? undefined : prevCursor);
-    }
-  };
-
-  const handleConfirmJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!joinModalTeam) return;
-
-    try {
-      await createJoinRequestMutation.mutateAsync({
-        teamId: joinModalTeam.id,
-        message: joinMessage.trim()
-      });
-      success('Join request sent!', 'The team leader will review your application.');
-      setJoinModalTeam(null);
-      setJoinMessage('');
-    } catch (err: any) {
-      toastError('Cannot submit request', err.message);
     }
   };
 
@@ -133,8 +113,12 @@ export function TeamDiscovery() {
       <div className="p-4 rounded-2xl bg-[#171E31] border border-[#35405A] mb-8 flex flex-col md:flex-row items-stretch md:items-center gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
+          <label htmlFor="team-search-input" className="sr-only">
+            Search teams by name or description
+          </label>
           <Search className="w-4 h-4 text-[#B5C1D4] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
+            id="team-search-input"
             type="text"
             value={search}
             onChange={(e) => {
@@ -143,14 +127,19 @@ export function TeamDiscovery() {
               setCursorHistory([]);
             }}
             placeholder="Search teams by name or description..."
+            aria-label="Search teams by name or description"
             className="w-full pl-9 pr-3.5 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
           />
         </div>
 
         {/* Skill Filter */}
         <div className="relative w-full md:w-56">
+          <label htmlFor="team-skill-input" className="sr-only">
+            Filter teams by skill
+          </label>
           <Filter className="w-4 h-4 text-[#B5C1D4] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
+            id="team-skill-input"
             type="text"
             value={skill}
             onChange={(e) => {
@@ -159,13 +148,15 @@ export function TeamDiscovery() {
               setCursorHistory([]);
             }}
             placeholder="Filter by skill (e.g. React)..."
+            aria-label="Filter teams by skill"
             className="w-full pl-9 pr-3.5 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
           />
         </div>
 
         {/* Only Open Teams Toggle */}
-        <label className="flex items-center gap-2 text-xs font-semibold text-[#E9EDF5] cursor-pointer px-2 py-1 select-none shrink-0">
+        <label htmlFor="only-open-teams" className="flex items-center gap-2 text-xs font-semibold text-[#E9EDF5] cursor-pointer px-2 py-1 select-none shrink-0">
           <input
+            id="only-open-teams"
             type="checkbox"
             checked={onlyOpen}
             onChange={(e) => {
@@ -173,6 +164,7 @@ export function TeamDiscovery() {
               setCursor(undefined);
               setCursorHistory([]);
             }}
+            aria-label="Only show teams with open seats"
             className="w-4 h-4 rounded text-[#9BF5CC] bg-[#222A42] border-[#35405A] focus:ring-[#9BF5CC]"
           />
           <span>Only open seats</span>
@@ -230,6 +222,7 @@ export function TeamDiscovery() {
               type="button"
               onClick={handlePrevPage}
               disabled={cursorHistory.length === 0}
+              aria-label="Previous page of teams"
               className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -244,6 +237,7 @@ export function TeamDiscovery() {
               type="button"
               onClick={handleNextPage}
               disabled={!meta?.hasMore}
+              aria-label="Next page of teams"
               className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition"
             >
               Next
@@ -264,56 +258,12 @@ export function TeamDiscovery() {
 
       {/* Join Request Confirmation Dialog */}
       {joinModalTeam && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
-        >
-          <div className="w-full max-w-md bg-[#171E31] border border-[#35405A] rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-[#E9EDF5] mb-2">
-              Apply to join {joinModalTeam.name}
-            </h3>
-            <p className="text-xs text-[#B5C1D4] mb-4">
-              Send a note to the team leader explaining why you'd be a great fit for their squad.
-            </p>
-
-            <form onSubmit={handleConfirmJoin} className="mt-4 space-y-4">
-              <div>
-                <label htmlFor="join-msg" className="block text-xs font-semibold text-[#E9EDF5] mb-1">
-                  Message (Optional)
-                </label>
-                <textarea
-                  id="join-msg"
-                  rows={3}
-                  value={joinMessage}
-                  onChange={(e) => setJoinMessage(e.target.value)}
-                  placeholder="Hey, I have strong experience in React and backend services..."
-                  maxLength={280}
-                  className="w-full px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setJoinModalTeam(null)}
-                  disabled={createJoinRequestMutation.isPending}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42] border border-[#35405A] transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createJoinRequestMutation.isPending}
-                  className="px-4 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] flex items-center gap-1.5 transition disabled:opacity-50"
-                >
-                  {createJoinRequestMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Submit Request
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <JoinRequestModal
+          isOpen={!!joinModalTeam}
+          teamId={joinModalTeam.id}
+          teamName={joinModalTeam.name}
+          onClose={() => setJoinModalTeam(null)}
+        />
       )}
     </AppShell>
   );
