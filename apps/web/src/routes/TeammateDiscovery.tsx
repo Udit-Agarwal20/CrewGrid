@@ -108,8 +108,8 @@ export function TeammateDiscovery() {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#9BF5CC]" />
-          <p className="text-sm font-medium text-[#B5C1D4]">Redirecting to active hackathon...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[#FF7A45]" />
+          <p className="text-sm font-medium text-zinc-400">Redirecting to active hackathon...</p>
         </div>
       </AppShell>
     );
@@ -132,16 +132,16 @@ export function TeammateDiscovery() {
     <AppShell hackathonId={hackathonId}>
       <div className="space-y-6">
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
+        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
           <Link
             to={`/app/events/${hackathonId}/teams`}
-            className="hover:text-[#9BF5CC] flex items-center gap-1 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC] rounded"
+            className="hover:text-white flex items-center gap-1 transition-colors focus-visible:ring-2 focus-visible:ring-white rounded"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back to Team Board
           </Link>
           <span>/</span>
-          <span className="text-[#E9EDF5] font-bold">Teammate Discovery</span>
+          <span className="text-white font-bold">Teammate Discovery</span>
         </div>
 
         <PageHeader
@@ -153,12 +153,12 @@ export function TeammateDiscovery() {
                 <button
                   type="button"
                   onClick={() => setSelectedTeamForInvite(myTeam?.id || null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-2 transition shadow-sm focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none"
+                  className="px-4 py-2 rounded-full text-xs font-bold text-black bg-white hover:bg-zinc-200 flex items-center gap-2 transition-all duration-200 active:scale-95 shadow-sm focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
                 >
                   <Link2 className="w-4 h-4" />
                   Create Team Invite Link
                 </button>
-                <span className="text-[11px] font-mono text-[#B5C1D4]">
+                <span className="text-[11px] font-mono text-zinc-400">
                   Single-use link for {myTeam?.name}
                 </span>
               </div>
@@ -168,14 +168,14 @@ export function TeammateDiscovery() {
 
         {/* Tab Selection if viewer is a team leader */}
         {isLeader && (
-          <div className="flex border-b border-[#35405A] gap-4">
+          <div className="flex border-b border-[#2C2826] gap-4">
             <button
               type="button"
               onClick={() => setActiveTab('all')}
-              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none ${
+              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-white focus:outline-none ${
                 activeTab === 'all'
-                  ? 'border-[#9BF5CC] text-[#9BF5CC]'
-                  : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+                  ? 'border-[#FF6B35] text-white'
+                  : 'border-transparent text-zinc-400 hover:text-white'
               }`}
             >
               <Users className="w-4 h-4" />
@@ -185,13 +185,13 @@ export function TeammateDiscovery() {
             <button
               type="button"
               onClick={() => setActiveTab('suggestions')}
-              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none ${
+              className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-white focus:outline-none ${
                 activeTab === 'suggestions'
-                  ? 'border-[#9BF5CC] text-[#9BF5CC]'
-                  : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+                  ? 'border-[#FF6B35] text-white'
+                  : 'border-transparent text-zinc-400 hover:text-white'
               }`}
             >
-              <Sparkles className="w-4 h-4 text-[#9BF5CC]" />
+              <Sparkles className="w-4 h-4 text-[#FF7A45]" />
               Smart Recommendations ({suggestions.length})
             </button>
           </div>
@@ -201,9 +201,9 @@ export function TeammateDiscovery() {
         {activeTab === 'all' && (
           <div className="space-y-6">
             {/* Filter Bar */}
-            <div className="p-4 rounded-2xl bg-[#171E31] border border-[#35405A] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-[#111114] border border-[#2C2826] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               <div className="relative">
-                <Search className="w-4 h-4 text-[#B5C1D4] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <label htmlFor="candidate-skill-filter" className="sr-only">
                   Filter by skill
                 </label>
@@ -213,7 +213,7 @@ export function TeammateDiscovery() {
                   placeholder="Filter by skill (e.g. react, node)..."
                   value={skillFilter}
                   onChange={(e) => setSkillFilter(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/50 focus:outline-none focus:border-[#9BF5CC] focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white focus-visible:ring-2 focus-visible:ring-white transition-colors"
                 />
               </div>
 
@@ -229,10 +229,10 @@ export function TeammateDiscovery() {
                     setCursor(undefined);
                     setCursorHistory([]);
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:border-[#9BF5CC] focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white focus:outline-none focus:ring-2 focus:ring-white focus-visible:ring-2 focus-visible:ring-white transition-colors"
                 >
                   {COMMON_TIMEZONES.map((tz) => (
-                    <option key={tz} value={tz}>
+                    <option key={tz} value={tz} className="bg-[#111114] text-white">
                       {tz}
                     </option>
                   ))}
@@ -250,7 +250,7 @@ export function TeammateDiscovery() {
                       setCursor(undefined);
                       setCursorHistory([]);
                     }}
-                    className="text-xs font-mono text-[#9BF5CC] hover:underline focus-visible:ring-2 focus-visible:ring-[#9BF5CC] rounded p-1"
+                    className="text-xs font-mono text-[#FF7A45] hover:underline focus-visible:ring-2 focus-visible:ring-[#FF7A45] rounded p-1"
                   >
                     Clear Filters
                   </button>
@@ -272,10 +272,10 @@ export function TeammateDiscovery() {
                 <SkeletonCard className="h-48" />
               </div>
             ) : candidates.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-[#171E31] border border-[#35405A] space-y-3">
-                <Users className="w-10 h-10 text-[#B5C1D4]/40 mx-auto" />
-                <h3 className="text-sm font-bold text-[#E9EDF5]">No Discoverable Candidates Found</h3>
-                <p className="text-xs text-[#B5C1D4] max-w-sm mx-auto">
+              <div className="p-12 text-center rounded-2xl bg-[#111114] border border-[#2C2826] space-y-3">
+                <Users className="w-10 h-10 text-zinc-600 mx-auto" />
+                <h3 className="font-display text-base font-bold text-white">No Discoverable Candidates Found</h3>
+                <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
                   No participants matched your filters, or participants haven't opted into public discoverability yet.
                 </p>
               </div>
@@ -291,19 +291,19 @@ export function TeammateDiscovery() {
                 </div>
 
                 {/* Pagination Controls */}
-                <div className="flex items-center justify-between mt-8 pt-4 border-t border-[#35405A]">
+                <div className="flex items-center justify-between mt-8 pt-6 border-t border-[#2C2826]">
                   <button
                     type="button"
                     onClick={handlePrevPage}
                     disabled={cursorHistory.length === 0}
                     aria-label="Previous page of candidates"
-                    className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                    className="px-4 py-2 rounded-xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] hover:bg-white/5 text-xs font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-white"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     Previous
                   </button>
 
-                  <span className="text-xs font-mono text-[#B5C1D4]">
+                  <span className="text-xs font-mono text-zinc-400">
                     Page {cursorHistory.length + 1}
                     {candidates.length > 0 ? ` (Showing ${candidates.length} candidates)` : ''}
                   </span>
@@ -313,7 +313,7 @@ export function TeammateDiscovery() {
                     onClick={handleNextPage}
                     disabled={!meta?.hasMore}
                     aria-label="Next page of candidates"
-                    className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                    className="px-4 py-2 rounded-xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] hover:bg-white/5 text-xs font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-white"
                   >
                     Next
                     <ChevronRight className="w-4 h-4" />
@@ -327,15 +327,15 @@ export function TeammateDiscovery() {
         {/* Tab 2: Smart Recommendations (Leader only) */}
         {activeTab === 'suggestions' && isLeader && (
           <div className="space-y-6">
-            <div className="p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A] space-y-2">
-              <div className="text-xs text-[#B5C1D4]">
-                <strong className="text-[#9BF5CC]">Explainable Matching:</strong> Suggestions are scored via{' '}
-                <code className="text-[#E9EDF5] bg-[#0B1020] px-1.5 py-0.5 rounded font-mono">
+            <div className="p-5 rounded-2xl bg-[#111114] border border-[#2C2826] space-y-2">
+              <div className="text-xs text-zinc-400">
+                <strong className="text-white font-semibold">Explainable Matching:</strong> Suggestions are scored via{' '}
+                <code className="text-[#FF7A45] bg-[#18181C] px-2 py-0.5 rounded-md font-mono border border-[#2C2826]">
                   Score = (0.7 * SkillCoverage) + (0.3 * TimezoneOverlap)
                 </code>
                 . Only discoverable participants who are not yet in a team are suggested.
               </div>
-              <p className="text-[11px] text-[#B5C1D4]/80">
+              <p className="text-[11px] text-zinc-500">
                 To invite a candidate to your team, generate a team invite link using the "Create Team Invite Link" action above and share it directly with them.
               </p>
             </div>
@@ -346,10 +346,10 @@ export function TeammateDiscovery() {
                 <SkeletonCard className="h-48" />
               </div>
             ) : suggestions.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-[#171E31] border border-[#35405A] space-y-2">
-                <Sparkles className="w-10 h-10 text-[#B5C1D4]/40 mx-auto" />
-                <h3 className="text-sm font-bold text-[#E9EDF5]">No Recommendations Right Now</h3>
-                <p className="text-xs text-[#B5C1D4] max-w-sm mx-auto">
+              <div className="p-12 text-center rounded-2xl bg-[#111114] border border-[#2C2826] space-y-2">
+                <Sparkles className="w-10 h-10 text-zinc-600 mx-auto" />
+                <h3 className="font-display text-base font-bold text-white">No Recommendations Right Now</h3>
+                <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
                   Make sure your team specifies skills needed in team settings. As participants update their profiles, suggestions will appear here.
                 </p>
               </div>

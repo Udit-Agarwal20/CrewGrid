@@ -70,8 +70,8 @@ export function TeamDiscovery() {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#9BF5CC]" />
-          <p className="text-sm font-medium text-[#B5C1D4]">Redirecting to active hackathon...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[#FF7A45]" />
+          <p className="text-sm font-medium text-zinc-400">Redirecting to active hackathon...</p>
         </div>
       </AppShell>
     );
@@ -100,7 +100,7 @@ export function TeamDiscovery() {
             <button
               type="button"
               onClick={() => setCreateModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] flex items-center gap-1.5 transition shadow-sm"
+              className="px-4 py-2 rounded-full bg-white hover:bg-zinc-200 text-black text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 active:scale-95 shadow-sm"
             >
               <Plus className="w-4 h-4" />
               Create Team
@@ -110,13 +110,13 @@ export function TeamDiscovery() {
       />
 
       {/* Filter and Search Bar */}
-      <div className="p-4 rounded-2xl bg-[#171E31] border border-[#35405A] mb-8 flex flex-col md:flex-row items-stretch md:items-center gap-3">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-[#111114] border border-[#2C2826] mb-8 flex flex-col md:flex-row items-stretch md:items-center gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
           <label htmlFor="team-search-input" className="sr-only">
             Search teams by name or description
           </label>
-          <Search className="w-4 h-4 text-[#B5C1D4] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             id="team-search-input"
             type="text"
@@ -128,7 +128,7 @@ export function TeamDiscovery() {
             }}
             placeholder="Search teams by name or description..."
             aria-label="Search teams by name or description"
-            className="w-full pl-9 pr-3.5 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+            className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors"
           />
         </div>
 
@@ -137,7 +137,7 @@ export function TeamDiscovery() {
           <label htmlFor="team-skill-input" className="sr-only">
             Filter teams by skill
           </label>
-          <Filter className="w-4 h-4 text-[#B5C1D4] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Filter className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             id="team-skill-input"
             type="text"
@@ -149,12 +149,12 @@ export function TeamDiscovery() {
             }}
             placeholder="Filter by skill (e.g. React)..."
             aria-label="Filter teams by skill"
-            className="w-full pl-9 pr-3.5 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+            className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors"
           />
         </div>
 
         {/* Only Open Teams Toggle */}
-        <label htmlFor="only-open-teams" className="flex items-center gap-2 text-xs font-semibold text-[#E9EDF5] cursor-pointer px-2 py-1 select-none shrink-0">
+        <label htmlFor="only-open-teams" className="flex items-center gap-2 text-xs font-semibold text-zinc-300 cursor-pointer px-2 py-1 select-none shrink-0">
           <input
             id="only-open-teams"
             type="checkbox"
@@ -165,7 +165,7 @@ export function TeamDiscovery() {
               setCursorHistory([]);
             }}
             aria-label="Only show teams with open seats"
-            className="w-4 h-4 rounded text-[#9BF5CC] bg-[#222A42] border-[#35405A] focus:ring-[#9BF5CC]"
+            className="w-4 h-4 rounded text-white bg-[#18181C] border-[#2C2826] focus:ring-white accent-white"
           />
           <span>Only open seats</span>
         </label>
@@ -217,19 +217,19 @@ export function TeamDiscovery() {
           </div>
 
           {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-8 pt-4 border-t border-[#35405A]">
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-[#2C2826]">
             <button
               type="button"
               onClick={handlePrevPage}
               disabled={cursorHistory.length === 0}
               aria-label="Previous page of teams"
-              className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition"
+              className="px-4 py-2 rounded-xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] hover:bg-white/5 text-xs font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
               Previous
             </button>
 
-            <span className="text-xs font-mono text-[#B5C1D4]">
+            <span className="text-xs font-mono text-zinc-400">
               {meta ? `Showing ${teams.length} teams` : ''}
             </span>
 
@@ -238,7 +238,7 @@ export function TeamDiscovery() {
               onClick={handleNextPage}
               disabled={!meta?.hasMore}
               aria-label="Next page of teams"
-              className="px-3.5 py-1.5 rounded-lg bg-[#171E31] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] hover:bg-[#222A42] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition"
+              className="px-4 py-2 rounded-xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] hover:bg-white/5 text-xs font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
             >
               Next
               <ChevronRight className="w-4 h-4" />

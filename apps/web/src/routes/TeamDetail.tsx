@@ -40,7 +40,7 @@ import { EditTeamModal } from '../components/teams/EditTeamModal';
 import { InviteModal } from '../components/invites/InviteModal';
 import { JoinRequestModal } from '../components/requests/JoinRequestModal';
 import { RequestRow } from '../components/requests/RequestRow';
-import { ScoreBreakdown } from '../components/matching/ScoreBreakdown';
+import { SuggestionCard } from '../components/matching/SuggestionCard';
 
 export function TeamDetail() {
   const { id: teamId } = useParams<{ id: string }>();
@@ -99,7 +99,7 @@ export function TeamDetail() {
           <div className="mt-4 text-center">
             <Link
               to="/app"
-              className="inline-flex items-center gap-2 text-sm text-[#9BF5CC] hover:underline"
+              className="inline-flex items-center gap-2 text-sm text-[#FF7A45] hover:underline"
             >
               <ArrowLeft className="w-4 h-4" />
               Return to dashboard
@@ -185,46 +185,46 @@ export function TeamDetail() {
     <AppShell hackathonId={team.hackathonId}>
       <div className="space-y-6">
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
+        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
           <Link
             to={`/app/events/${team.hackathonId}/teams`}
-            className="hover:text-[#9BF5CC] flex items-center gap-1 transition"
+            className="hover:text-white flex items-center gap-1 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back to Team Board
           </Link>
           <span>/</span>
-          <span className="text-[#E9EDF5] font-bold">{team.name}</span>
+          <span className="text-white font-bold">{team.name}</span>
         </div>
 
         {/* Team Banner / Header */}
-        <div className="p-6 md:p-8 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-xl relative overflow-hidden">
+        <div className="p-6 md:p-8 rounded-2xl bg-[#111114] border border-[#2C2826] shadow-xl relative overflow-hidden">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div className="space-y-3 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl md:text-3xl font-black text-[#E9EDF5] tracking-tight truncate">
+                <h1 className="font-display text-2xl md:text-3xl font-bold text-white tracking-tight truncate">
                   {team.name}
                 </h1>
                 <StageBadge stage={team.stage} />
                 {isMember && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-[#9BF5CC]/15 text-[#9BF5CC] border border-[#9BF5CC]/30">
+                  <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#FF6B35]/15 text-[#FF7A45] border border-[#FF6B35]/30">
                     {isLeader ? 'You are Leader' : 'You are a Member'}
                   </span>
                 )}
               </div>
 
               {team.description ? (
-                <p className="text-sm text-[#B5C1D4] leading-relaxed max-w-3xl">
+                <p className="text-sm text-zinc-400 leading-relaxed max-w-3xl">
                   {team.description}
                 </p>
               ) : (
-                <p className="text-sm text-[#B5C1D4] italic">No description provided.</p>
+                <p className="text-sm text-zinc-500 italic">No description provided.</p>
               )}
 
               {/* Skills Tags */}
               {team.requiredSkills && team.requiredSkills.length > 0 && (
                 <div className="pt-2">
-                  <span className="text-xs font-mono uppercase text-[#B5C1D4] block mb-2 font-semibold">
+                  <span className="text-xs font-mono uppercase text-zinc-400 block mb-2 font-semibold">
                     Skills Needed:
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -238,7 +238,7 @@ export function TeamDetail() {
 
             {/* Capacity & Action Controls */}
             <div className="flex flex-col sm:items-end gap-4 shrink-0">
-              <div className="w-full sm:w-56 p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A]">
+              <div className="w-full sm:w-56 p-4 rounded-xl bg-[#18181C] border border-[#2C2826]">
                 <SeatProgress
                   memberCount={team.memberCount}
                   maxSize={team.maxSize}
@@ -252,7 +252,7 @@ export function TeamDetail() {
                     <button
                       type="button"
                       onClick={() => setIsEditOpen(true)}
-                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#E9EDF5] bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] flex items-center gap-1.5 transition"
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#18181C] hover:bg-[#202026] border border-[#2C2826] flex items-center gap-1.5 transition-colors"
                     >
                       <Edit className="w-3.5 h-3.5" />
                       Edit Team
@@ -262,7 +262,7 @@ export function TeamDetail() {
                       type="button"
                       onClick={() => setIsInviteOpen(true)}
                       aria-label="Generate team invite link"
-                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-1.5 transition shadow-sm"
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-black bg-white hover:bg-zinc-200 flex items-center gap-1.5 transition-all duration-200 active:scale-95 shadow-sm"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
                       Invite Link
@@ -274,7 +274,7 @@ export function TeamDetail() {
                   <button
                     type="button"
                     onClick={() => setIsLeaveConfirmOpen(true)}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#F87171] bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 flex items-center gap-1.5 transition"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-[#F43F5E] bg-[#F43F5E]/10 hover:bg-[#F43F5E]/20 border border-[#F43F5E]/30 flex items-center gap-1.5 transition-colors"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     Leave Team
@@ -285,7 +285,7 @@ export function TeamDetail() {
                   <button
                     type="button"
                     onClick={() => setIsJoinModalOpen(true)}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] flex items-center gap-2 transition shadow-md"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-black bg-white hover:bg-zinc-200 flex items-center gap-2 transition-all duration-200 active:scale-95 shadow-md"
                   >
                     <UserPlus className="w-4 h-4" />
                     Request to Join
@@ -297,22 +297,22 @@ export function TeamDetail() {
 
           {/* Full capacity notice */}
           {openSeats === 0 && (
-            <div className="mt-4 p-3 rounded-xl bg-[#222A42]/60 border border-[#35405A] flex items-center gap-2 text-xs text-[#B5C1D4]">
-              <Lock className="w-4 h-4 text-[#FBBF24] shrink-0" />
+            <div className="mt-5 p-3.5 rounded-xl bg-[#18181C] border border-[#2C2826] flex items-center gap-2.5 text-xs text-zinc-300">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
               <span>This team is at maximum capacity ({team.maxSize}/{team.maxSize} seats filled). Join requests cannot be approved while full.</span>
             </div>
           )}
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-[#35405A] gap-4 overflow-x-auto">
+        <div className="flex border-b border-[#2C2826] gap-4 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('roster')}
-            className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+            className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === 'roster'
-                ? 'border-[#9BF5CC] text-[#9BF5CC]'
-                : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+                ? 'border-[#FF6B35] text-white'
+                : 'border-transparent text-zinc-400 hover:text-white'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -322,10 +322,10 @@ export function TeamDetail() {
           <button
             type="button"
             onClick={() => setActiveTab('audit')}
-            className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+            className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === 'audit'
-                ? 'border-[#9BF5CC] text-[#9BF5CC]'
-                : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+                ? 'border-[#FF6B35] text-white'
+                : 'border-transparent text-zinc-400 hover:text-white'
             }`}
           >
             <History className="w-4 h-4" />
@@ -337,16 +337,16 @@ export function TeamDetail() {
               <button
                 type="button"
                 onClick={() => setActiveTab('requests')}
-                className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+                className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${
                   activeTab === 'requests'
-                    ? 'border-[#9BF5CC] text-[#9BF5CC]'
-                    : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+                    ? 'border-[#FF6B35] text-white'
+                    : 'border-transparent text-zinc-400 hover:text-white'
                 }`}
               >
                 <Inbox className="w-4 h-4" />
                 Join Requests
                 {pendingRequests.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#9BF5CC] text-[#0B1020]">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#FF6B35] text-white">
                     {pendingRequests.length}
                   </span>
                 )}
@@ -355,10 +355,10 @@ export function TeamDetail() {
               <button
                 type="button"
                 onClick={() => setActiveTab('suggestions')}
-                className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition ${
+                className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${
                   activeTab === 'suggestions'
-                    ? 'border-[#9BF5CC] text-[#9BF5CC]'
-                    : 'border-transparent text-[#B5C1D4] hover:text-[#E9EDF5]'
+                    ? 'border-[#FF6B35] text-white'
+                    : 'border-transparent text-zinc-400 hover:text-white'
                 }`}
               >
                 <Sparkles className="w-4 h-4" />
@@ -372,11 +372,11 @@ export function TeamDetail() {
         {activeTab === 'roster' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#B5C1D4] font-mono">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">
                 Team Roster ({members.length} / {team.maxSize})
               </h2>
               {isLeader && members.length > 1 && (
-                <span className="text-xs text-[#B5C1D4] italic">
+                <span className="text-xs text-zinc-500 italic">
                   As leader, you can transfer leadership or manage teammates.
                 </span>
               )}
@@ -388,8 +388,8 @@ export function TeamDetail() {
                 <SkeletonCard className="h-20" />
               </div>
             ) : members.length === 0 ? (
-              <div className="p-8 text-center rounded-2xl bg-[#171E31] border border-[#35405A]">
-                <p className="text-sm text-[#B5C1D4]">No members currently found for this team.</p>
+              <div className="p-8 text-center rounded-2xl bg-[#111114] border border-[#2C2826]">
+                <p className="text-sm text-zinc-400">No members currently found for this team.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -410,10 +410,10 @@ export function TeamDetail() {
 
         {activeTab === 'audit' && (
           <div className="space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-[#B5C1D4] font-mono">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">
               Immutable Audit Timeline
             </h2>
-            <div className="p-6 rounded-2xl bg-[#171E31] border border-[#35405A]">
+            <div className="p-6 rounded-2xl bg-[#111114] border border-[#2C2826]">
               <AuditTimeline teamId={team.id} />
             </div>
           </div>
@@ -422,10 +422,10 @@ export function TeamDetail() {
         {activeTab === 'requests' && isLeader && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#B5C1D4] font-mono">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">
                 Incoming Join Requests ({requests.length})
               </h2>
-              <span className="text-xs text-[#B5C1D4]">
+              <span className="text-xs text-zinc-500">
                 Accepting a member validates max capacity atomically with MongoDB transactions.
               </span>
             </div>
@@ -433,9 +433,9 @@ export function TeamDetail() {
             {loadingRequests ? (
               <SkeletonCard className="h-24" />
             ) : requests.length === 0 ? (
-              <div className="p-8 text-center rounded-2xl bg-[#171E31] border border-[#35405A]">
-                <Inbox className="w-8 h-8 text-[#B5C1D4]/40 mx-auto mb-2" />
-                <p className="text-sm text-[#B5C1D4]">No incoming join requests right now.</p>
+              <div className="p-8 text-center rounded-2xl bg-[#111114] border border-[#2C2826]">
+                <Inbox className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                <p className="text-sm text-zinc-400">No incoming join requests right now.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -457,18 +457,18 @@ export function TeamDetail() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-[#B5C1D4] font-mono flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#9BF5CC]" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#FF7A45]" />
                   Recommended Teammates
                 </h2>
-                <p className="text-xs text-[#B5C1D4] mt-0.5">
+                <p className="text-xs text-zinc-500 mt-0.5">
                   Ranked deterministically using: 70% Complementary Skill Coverage + 30% Timezone Overlap.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsInviteOpen(true)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition"
+                className="px-4 py-2 rounded-full text-xs font-bold text-black bg-white hover:bg-zinc-200 transition-all duration-200 active:scale-95 shadow-sm"
               >
                 Create Invite Link
               </button>
@@ -480,28 +480,18 @@ export function TeamDetail() {
                 <SkeletonCard className="h-44" />
               </div>
             ) : suggestions.length === 0 ? (
-              <div className="p-8 text-center rounded-2xl bg-[#171E31] border border-[#35405A]">
-                <p className="text-sm text-[#B5C1D4]">
+              <div className="p-8 text-center rounded-2xl bg-[#111114] border border-[#2C2826]">
+                <p className="text-sm text-zinc-400">
                   No teammate suggestions found matching your needed skills. Ensure your team has specified required skills in team settings.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {suggestions.map((suggestion) => (
-                  <div
+                  <SuggestionCard
                     key={suggestion.userId}
-                    className="p-5 rounded-2xl bg-[#171E31] border border-[#35405A] space-y-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-bold text-base text-[#E9EDF5]">
-                          {suggestion.displayName}
-                        </h3>
-                      </div>
-                    </div>
-
-                    <ScoreBreakdown suggestion={suggestion} />
-                  </div>
+                    suggestion={suggestion}
+                  />
                 ))}
               </div>
             )}

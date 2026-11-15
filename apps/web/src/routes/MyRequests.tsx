@@ -32,8 +32,8 @@ export function MyRequests() {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#9BF5CC]" />
-          <p className="text-sm font-medium text-[#B5C1D4]">Redirecting to active hackathon...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[#FF7A45]" />
+          <p className="text-sm font-medium text-zinc-400">Redirecting to active hackathon...</p>
         </div>
       </AppShell>
     );
@@ -56,16 +56,16 @@ export function MyRequests() {
     <AppShell hackathonId={hackathonId}>
       <div className="space-y-6 max-w-4xl mx-auto">
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
+        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
           <Link
             to={hackathonId ? `/app/events/${hackathonId}/teams` : '/app'}
-            className="hover:text-[#9BF5CC] flex items-center gap-1 transition"
+            className="hover:text-white flex items-center gap-1 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back to Team Board
           </Link>
           <span>/</span>
-          <span className="text-[#E9EDF5] font-bold">My Requests</span>
+          <span className="text-white font-bold">My Requests</span>
         </div>
 
         <PageHeader
@@ -85,18 +85,18 @@ export function MyRequests() {
             <SkeletonCard className="h-24" />
           </div>
         ) : requests.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl bg-[#171E31] border border-[#35405A] space-y-4">
-            <Inbox className="w-12 h-12 text-[#B5C1D4]/40 mx-auto" />
+          <div className="p-12 text-center rounded-2xl bg-[#111114] border border-[#2C2826] space-y-4">
+            <Inbox className="w-12 h-12 text-zinc-600 mx-auto" />
             <div>
-              <h3 className="text-base font-bold text-[#E9EDF5]">No Join Requests Sent</h3>
-              <p className="text-xs text-[#B5C1D4] mt-1 max-w-sm mx-auto">
+              <h3 className="font-display text-base font-bold text-white">No Join Requests Sent</h3>
+              <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
                 You haven't applied to any teams yet. Browse the team discovery board to find forming teams looking for your skills.
               </p>
             </div>
             {hackathonId && (
               <Link
                 to={`/app/events/${hackathonId}/teams`}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-black bg-white hover:bg-zinc-200 transition-all duration-200 active:scale-95 shadow-sm"
               >
                 <Compass className="w-4 h-4" />
                 Explore Open Teams
@@ -109,10 +109,10 @@ export function MyRequests() {
             {pendingRequests.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-[#FBBF24]">
+                  <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
                     Pending Review ({pendingRequests.length})
                   </h2>
-                  <span className="text-[11px] text-[#B5C1D4]">
+                  <span className="text-[11px] text-zinc-500">
                     Awaiting decision from team leaders
                   </span>
                 </div>
@@ -126,8 +126,8 @@ export function MyRequests() {
 
             {/* Resolved / Historical Section */}
             {pastRequests.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-[#35405A]">
-                <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-[#B5C1D4]">
+              <div className="space-y-3 pt-6 border-t border-[#2C2826]">
+                <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">
                   Request History ({pastRequests.length})
                 </h2>
                 <div className="space-y-2.5 opacity-80">

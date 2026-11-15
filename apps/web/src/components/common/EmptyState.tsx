@@ -12,23 +12,23 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  icon = <Users className="w-8 h-8 text-[#B5C1D4]" />,
+  icon = <Users className="w-7 h-7 text-zinc-400" />,
   title,
   description,
   action
 }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center rounded-2xl bg-[#171E31] border border-[#35405A]">
-      <div className="w-16 h-16 rounded-2xl bg-[#222A42] flex items-center justify-center mb-4 border border-[#35405A]">
+    <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center rounded-2xl bg-[#111114] border border-[#2C2826]">
+      <div className="w-14 h-14 rounded-2xl bg-[#18181C] flex items-center justify-center mb-4 border border-[#2C2826]">
         {icon}
       </div>
-      <h3 className="text-base font-bold text-[#E9EDF5]">{title}</h3>
-      <p className="text-sm text-[#B5C1D4] mt-1.5 max-w-sm leading-relaxed">{description}</p>
+      <h3 className="font-display text-base sm:text-lg font-bold text-white">{title}</h3>
+      <p className="text-sm text-zinc-400 mt-1.5 max-w-sm leading-relaxed">{description}</p>
       {action && (
         <button
           type="button"
           onClick={action.onClick}
-          className="mt-5 px-4 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-sm font-semibold hover:bg-[#86e0b7] transition focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+          className="mt-6 px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-semibold transition-all duration-200 active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none shadow-sm"
         >
           {action.label}
         </button>
@@ -36,4 +36,3 @@ export function EmptyState({
     </div>
   );
 }
-

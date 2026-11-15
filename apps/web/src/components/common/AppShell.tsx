@@ -83,11 +83,11 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
   }, [mobileMenuOpen]);
 
   return (
-    <div className="min-h-screen bg-[#0B1020] text-[#E9EDF5] flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#08080A] text-[#F4F4F5] flex flex-col md:flex-row selection:bg-[#FF6B35] selection:text-[#08080A]">
       {/* Accessible Skip Link */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 z-50 px-4 py-2 bg-[#9BF5CC] text-[#0B1020] font-bold rounded-lg"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 z-50 px-4 py-2 bg-white text-black font-bold rounded-xl shadow-lg"
       >
         Skip to main content
       </a>
@@ -98,24 +98,24 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
       </div>
 
       {/* Mobile Top Header */}
-      <div className="md:hidden sticky top-0 z-50 bg-[#171E31]/95 backdrop-blur border-b border-[#35405A] px-4 h-16 flex items-center justify-between">
+      <div className="md:hidden sticky top-0 z-50 bg-[#08080A]/90 backdrop-blur-md border-b border-[#2C2826] px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <span className="w-6 h-6 rounded-md bg-[#9BF5CC] flex items-center justify-center text-[#0B1020] text-xs font-black">
+          <span className="w-7 h-7 rounded-xl bg-white text-black font-display font-black flex items-center justify-center text-xs">
             C
           </span>
-          <span className="font-bold text-base text-[#E9EDF5]">CrewGrid</span>
+          <span className="font-display font-bold text-base text-white tracking-tight">CrewGrid</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <LiveConnectionStatus status={status} lastActivity={lastActivity} />
           <button
             ref={toggleBtnRef}
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            className="p-2 rounded-lg text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42] transition"
+            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
@@ -127,7 +127,7 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
           role="dialog"
           aria-modal="true"
           aria-label="Mobile navigation menu"
-          className="fixed inset-0 z-40 md:hidden bg-black/75 backdrop-blur-xs flex pt-16"
+          className="fixed inset-0 z-40 md:hidden bg-black/80 backdrop-blur-sm flex pt-16"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setMobileMenuOpen(false);
@@ -135,7 +135,7 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
             }
           }}
         >
-          <div className="w-4/5 max-w-xs h-full bg-[#171E31] border-r border-[#35405A] flex flex-col shadow-2xl">
+          <div className="w-4/5 max-w-xs h-full bg-[#0C0C0F] border-r border-[#2C2826] flex flex-col shadow-2xl">
             <SidebarNav
               onNavigate={() => {
                 setMobileMenuOpen(false);
@@ -149,10 +149,12 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
       {/* Main Content Area */}
       <div className="flex-1 md:pl-64 flex flex-col min-w-0">
         {/* Top Status Bar (Desktop) */}
-        <header className="hidden md:flex h-16 px-8 items-center justify-between border-b border-[#35405A] bg-[#0B1020]/60 backdrop-blur sticky top-0 z-20">
-          <div className="flex items-center gap-2 text-xs font-mono text-[#B5C1D4]">
-            <span>Event:</span>
-            <span className="font-semibold text-[#E9EDF5]">{activeHackathon?.title || 'None selected'}</span>
+        <header className="hidden md:flex h-16 px-8 items-center justify-between border-b border-[#2C2826] bg-[#08080A]/70 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center gap-2.5 text-xs font-mono text-zinc-400">
+            <span className="uppercase text-[11px] font-semibold text-zinc-400">Event:</span>
+            <span className="font-semibold text-white px-2.5 py-0.5 rounded-full bg-[#18181C] border border-[#2C2826]">
+              {activeHackathon?.title || 'None selected'}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <LiveConnectionStatus status={status} lastActivity={lastActivity} />
@@ -164,17 +166,17 @@ export function AppShell({ children, hackathonId }: AppShellProps) {
           {children}
         </main>
 
-        <footer className="py-6 px-8 border-t border-[#35405A] text-xs text-[#B5C1D4] flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>CrewGrid · Hack4Hack Crew Hiring Challenge 2026 (PS1)</p>
-          <div className="flex items-center gap-4 text-[11px]">
-            <Link to="/engineering" className="hover:text-[#9BF5CC] transition underline underline-offset-2">
+        <footer className="py-6 px-8 border-t border-[#2C2826] text-xs text-zinc-400 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>CrewGrid · Hack4Hack Crew Hiring Challenge 2026 (Problem Statement 1)</p>
+          <div className="flex items-center gap-4 text-xs">
+            <Link to="/engineering" className="hover:text-white transition-colors underline underline-offset-2">
               Technical Evidence
             </Link>
             <a
               href="https://github.com/Udit-Agarwal20/CrewGrid"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-[#9BF5CC] transition"
+              className="hover:text-white transition-colors"
             >
               GitHub
             </a>

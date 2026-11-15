@@ -144,7 +144,7 @@ export function Modal({
       aria-labelledby={title ? titleId : undefined}
       aria-describedby={description ? descriptionId : undefined}
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto"
       onClick={(e) => {
         // Light dismiss on backdrop click only if not actively submitting a mutation
         if (e.target === e.currentTarget && !isSubmitting) {
@@ -155,22 +155,22 @@ export function Modal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className={`w-full ${maxWidth} p-6 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl text-[#E9EDF5] my-8 animate-in fade-in zoom-in-95 duration-150 focus:outline-none ${className}`}
+        className={`w-full ${maxWidth} p-6 sm:p-7 rounded-2xl bg-[#111114] border border-[#2C2826] shadow-2xl text-white my-8 focus:outline-none ${className}`}
       >
         {/* Modal Header */}
-        <div className="flex items-start justify-between pb-4 border-b border-[#35405A] gap-4">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-start justify-between pb-4 border-b border-[#2C2826] gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             {icon && (
-              <span className="w-8 h-8 rounded-lg bg-[#9BF5CC]/15 text-[#9BF5CC] flex items-center justify-center shrink-0">
+              <span className="w-9 h-9 rounded-xl bg-[#18181C] border border-[#2C2826] text-[#FF7A45] flex items-center justify-center shrink-0">
                 {icon}
               </span>
             )}
             <div className="min-w-0">
-              <h2 id={titleId} className="text-lg font-bold text-[#E9EDF5] truncate">
+              <h2 id={titleId} className="font-display text-lg font-bold text-white truncate">
                 {title}
               </h2>
               {description && (
-                <p id={descriptionId} className="text-xs text-[#B5C1D4] mt-0.5 leading-relaxed">
+                <p id={descriptionId} className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
                   {description}
                 </p>
               )}
@@ -183,7 +183,7 @@ export function Modal({
               onClick={onClose}
               disabled={isSubmitting}
               aria-label={closeButtonAriaLabel}
-              className="p-1.5 rounded-lg text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none transition disabled:opacity-40 shrink-0"
+              className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 focus-visible:ring-2 focus-visible:ring-white focus:outline-none transition disabled:opacity-40 shrink-0"
             >
               <X className="w-5 h-5" />
             </button>
@@ -191,7 +191,7 @@ export function Modal({
         </div>
 
         {/* Modal Body */}
-        <div className="mt-4">{children}</div>
+        <div className="mt-5">{children}</div>
       </div>
     </div>
   );

@@ -110,13 +110,13 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {errorMessage && (
-          <div role="alert" className="p-3 rounded-lg bg-[#F87171]/10 border border-[#F87171]/30 text-xs text-[#F87171]">
+          <div role="alert" className="p-3 rounded-xl bg-[#181113] border border-[#4A2027] text-xs text-[#F43F5E]">
             {errorMessage}
           </div>
         )}
 
         <div>
-          <label htmlFor="edit-team-name" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+          <label htmlFor="edit-team-name" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
             Team Name
           </label>
           <input
@@ -127,12 +127,12 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={60}
-            className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors"
           />
         </div>
 
         <div>
-          <label htmlFor="edit-team-desc" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+          <label htmlFor="edit-team-desc" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
             Description
           </label>
           <textarea
@@ -141,14 +141,14 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={500}
-            className="w-full px-3.5 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC] resize-none"
+            className="w-full px-3.5 py-2 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors resize-none"
           />
         </div>
 
         {/* Capacity Limits */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="edit-team-min-size" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+            <label htmlFor="edit-team-min-size" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
               Min Team Size ({minLimit}–{maxLimit})
             </label>
             <input
@@ -158,11 +158,11 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
               max={maxSize}
               value={minSize}
               onChange={(e) => setMinSize(parseInt(e.target.value, 10) || minLimit)}
-              className="w-full px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] font-mono focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+              className="w-full px-3 py-2 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white font-mono focus:ring-2 focus:ring-white focus:outline-none transition-colors"
             />
           </div>
           <div>
-            <label htmlFor="edit-team-max-size" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+            <label htmlFor="edit-team-max-size" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
               Max Capacity (Min {team.memberCount} members)
             </label>
             <input
@@ -172,14 +172,14 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
               max={maxLimit}
               value={maxSize}
               onChange={(e) => setMaxSize(parseInt(e.target.value, 10) || maxLimit)}
-              className="w-full px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] font-mono focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+              className="w-full px-3 py-2 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white font-mono focus:ring-2 focus:ring-white focus:outline-none transition-colors"
             />
           </div>
         </div>
 
         {/* Required Skills */}
         <div>
-          <label htmlFor="edit-team-skill-input" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+          <label htmlFor="edit-team-skill-input" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
             Skills Needed (Up to 10)
           </label>
           <div className="flex gap-2">
@@ -196,13 +196,13 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
               }}
               placeholder="e.g. React, Rust, UI/UX"
               maxLength={40}
-              className="flex-1 px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/50 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+              className="flex-1 px-3 py-2 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors"
             />
             <button
               type="button"
               onClick={handleAddSkill}
               aria-label="Add"
-              className="px-3 py-2 rounded-lg bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none transition"
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-[#2C2826] text-xs font-semibold text-white flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-white focus:outline-none transition"
             >
               <Plus className="w-3.5 h-3.5" />
               Add
@@ -219,19 +219,19 @@ export function EditTeamModal({ isOpen, team, onClose, onUpdated }: EditTeamModa
         </div>
 
         {/* Form Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#35405A]">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#2C2826]">
           <button
             type="button"
             onClick={onClose}
             disabled={editTeamMutation.isPending}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-[#B5C1D4] hover:text-[#E9EDF5] hover:bg-[#222A42] border border-[#35405A] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none transition disabled:opacity-40"
+            className="px-4 py-2 rounded-full text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/5 border border-[#2C2826] focus-visible:ring-2 focus-visible:ring-white focus:outline-none transition disabled:opacity-40"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={editTeamMutation.isPending}
-            className="px-5 py-2 rounded-lg bg-[#9BF5CC] text-[#0B1020] text-xs font-bold hover:bg-[#86e0b7] focus-visible:ring-2 focus-visible:ring-[#9BF5CC] focus:outline-none flex items-center gap-2 transition disabled:opacity-50 shadow-sm"
+            className="px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:bg-zinc-200 focus-visible:ring-2 focus-visible:ring-white focus:outline-none flex items-center gap-2 transition-all duration-200 active:scale-95 disabled:opacity-50 shadow-md shadow-white/10"
           >
             {editTeamMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Save Changes

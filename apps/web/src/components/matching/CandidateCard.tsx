@@ -8,30 +8,30 @@ interface CandidateCardProps {
 
 export function CandidateCard({ user }: CandidateCardProps) {
   return (
-    <div className="flex flex-col justify-between p-5 rounded-2xl bg-[#171E31] border border-[#35405A] hover:border-[#9BF5CC]/30 transition shadow-lg">
+    <div className="flex flex-col justify-between p-6 rounded-2xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] hover:-translate-y-1 transition-all duration-300 shadow-lg">
       <div>
-        <div className="flex items-start gap-3.5 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-[#222A42] border border-[#35405A] text-[#9BF5CC] flex items-center justify-center shrink-0">
+        <div className="flex items-start gap-3.5 mb-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[#18181C] border border-[#2C2826] text-[#FF7A45] flex items-center justify-center shrink-0">
             <User className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-base font-bold text-[#E9EDF5] truncate">{user.displayName}</h3>
+            <h3 className="font-display text-base font-bold text-white truncate">{user.displayName}</h3>
             {user.handle && (
-              <span className="font-mono text-xs text-[#9BF5CC] block">@{user.handle}</span>
+              <span className="font-mono text-xs text-[#FF7A45] block">@{user.handle}</span>
             )}
           </div>
         </div>
 
         {user.bio ? (
-          <p className="text-xs text-[#B5C1D4] line-clamp-3 mb-4 leading-relaxed">{user.bio}</p>
+          <p className="text-xs text-zinc-400 line-clamp-3 mb-4 leading-relaxed">{user.bio}</p>
         ) : (
-          <p className="text-xs text-[#B5C1D4] italic mb-4">No bio provided.</p>
+          <p className="text-xs text-zinc-500 italic mb-4">No bio provided.</p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-[#B5C1D4] mb-4 font-mono">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400 mb-4 font-mono">
           {user.timezone && (
-            <div className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-[#9BF5CC]" />
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-[#FF7A45]" />
               <span>{user.timezone}</span>
             </div>
           )}
