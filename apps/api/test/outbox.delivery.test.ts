@@ -649,7 +649,7 @@ describe('C02: Outbox & SSE Delivery Reliability Regression Tests', () => {
     connectionManager.updateClientTeam(user._id, hackathon._id, null, teamId);
 
     // 4. Replay finishes and flushBuffer runs
-    connectionManager.flushBuffer(connectionId, null);
+    await connectionManager.flushBuffer(connectionId, new Set());
 
     // In the vulnerable implementation:
     // flushBuffer blindly writes buffered messages without re-verifying current authorization!
@@ -1095,5 +1095,182 @@ describe('C02: Outbox & SSE Delivery Reliability Regression Tests', () => {
     expect(pollerDispatcher.getPollCursor()).toBeNull();
 
     await pollerDispatcher.stop();
+  });
+
+  // --------------------------------------------------------------------------
+  // 20. Finding A: Asynchronous flush ordering race
+  // --------------------------------------------------------------------------
+  it('REPRODUCTION FINDING A: concurrent broadcast during async flushBuffer cannot overtake earlier buffered event', async () => {
+    const hackathon = await createTestHackathon();
+    const teamId = new ObjectId();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+    const db = getDatabase();
+
+    await db.collection('memberships').insertOne({
+      hackathonId: hackathon._id,
+      teamId,
+      userId: user._id,
+      role: 'member',
+      joinedAt: new Date()
+    });
+
+    // Connection starts in buffering mode with active teamId
+    const connectionId = connectionManager.addConnection(user._id, hackathon._id, teamId, mockRes, 'token-order-test', {
+      buffering: true
+    });
+
+    // 1. Earlier buffered team-private Event A
+    const eventA: OutboxEventDocument = {
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId,
+      userId: null,
+      scope: 'team',
+      eventType: 'team.created',
+      payload: { name: 'Event A - Earlier Buffered' },
+      createdAt: new Date(Date.now() - 5000),
+      expiresAt: new Date(Date.now() + 7200000)
+    };
+    await connectionManager.broadcastEvent(eventA);
+
+    // 2. Install a controlled promise barrier on membershipRepo.findActiveMembership
+    // so when flushBuffer checks authorization for Event A, we pause it deterministically.
+    const origFindActiveMembership = membershipRepo.findActiveMembership;
+    let barrierReached = false;
+    let resolveBarrier: () => void = () => {};
+    const barrierPromise = new Promise<void>((resolve) => {
+      resolveBarrier = resolve;
+    });
+
+    membershipRepo.findActiveMembership = async (hackathonId: ObjectId, userId: ObjectId) => {
+      if (!barrierReached) {
+        barrierReached = true;
+        await barrierPromise;
+      }
+      return origFindActiveMembership.call(membershipRepo, hackathonId, userId);
+    };
+
+    try {
+      // 3. Initiate flushBuffer in the background
+      const flushPromise = connectionManager.flushBuffer(connectionId, new Set());
+
+      // Deterministically wait until flushBuffer begins authorization check for Event A
+      while (!barrierReached) {
+        await new Promise((r) => setImmediate(r));
+      }
+
+      // 4. While Event A's DB lookup is paused, broadcast newer Event B
+      const eventB: OutboxEventDocument = {
+        _id: new ObjectId(),
+        hackathonId: hackathon._id,
+        teamId: null,
+        userId: null,
+        scope: 'public-hackathon',
+        eventType: 'team.updated',
+        payload: { name: 'Event B - Newer Live' },
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 7200000)
+      };
+
+      await connectionManager.broadcastEvent(eventB);
+
+      // Under the flawed/unpatched implementation:
+      // conn.buffering was already set to false before Event A was written!
+      // Thus, Event B was written immediately to mockRes, overtaking Event A!
+      // Under the robust/patched implementation:
+      // conn.buffering remains true while flushing; Event B is queued behind Event A in conn.buffer!
+      // At this point (barrier still paused), Event B MUST NOT have been written yet:
+      expect(mockRes.getOutput()).not.toContain('Event B - Newer Live');
+
+      // 5. Release barrier and await flushBuffer completion
+      resolveBarrier();
+      await flushPromise;
+
+      // 6. Verify delivery and strict FIFO order
+      const output = mockRes.getOutput();
+      expect(output).toContain('Event A - Earlier Buffered');
+      expect(output).toContain('Event B - Newer Live');
+
+      const idxA = output.indexOf('Event A - Earlier Buffered');
+      const idxB = output.indexOf('Event B - Newer Live');
+      expect(idxA).toBeGreaterThan(-1);
+      expect(idxB).toBeGreaterThan(-1);
+      expect(idxA).toBeLessThan(idxB); // Event A MUST precede Event B!
+    } finally {
+      membershipRepo.findActiveMembership = origFindActiveMembership;
+      resolveBarrier();
+    }
+  });
+
+  it('Finding A: bounded drain limit triggers sync.gap overflow fallback under sustained throughput', async () => {
+    const hackathon = await createTestHackathon();
+    const teamId = new ObjectId();
+    const user = await createTestUser();
+    const mockRes = createMockSseResponse();
+    const db = getDatabase();
+
+    await db.collection('memberships').insertOne({
+      hackathonId: hackathon._id,
+      teamId,
+      userId: user._id,
+      role: 'member',
+      joinedAt: new Date()
+    });
+
+    const connectionId = connectionManager.addConnection(user._id, hackathon._id, teamId, mockRes, 'token-overflow-pass', {
+      buffering: true
+    });
+
+    // Seed 1 event so flush has work
+    await connectionManager.broadcastEvent({
+      _id: new ObjectId(),
+      hackathonId: hackathon._id,
+      teamId,
+      userId: null,
+      scope: 'team',
+      eventType: 'team.created',
+      payload: { pass: 0 },
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 7200000)
+    });
+
+    // Intercept findActiveMembership to inject a new event into the buffer on each pass
+    let passCount = 0;
+    const origFindActiveMembership = membershipRepo.findActiveMembership;
+    membershipRepo.findActiveMembership = async (hackathonId: ObjectId, userId: ObjectId) => {
+      passCount++;
+      // Inject next event while flush is in progress (up to 12 times)
+      if (passCount <= 12) {
+        await connectionManager.broadcastEvent({
+          _id: new ObjectId(),
+          hackathonId: hackathon._id,
+          teamId,
+          userId: null,
+          scope: 'team',
+          eventType: 'team.created',
+          payload: { pass: passCount },
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 7200000)
+        });
+      }
+      return origFindActiveMembership.call(membershipRepo, hackathonId, userId);
+    };
+
+    try {
+      await connectionManager.flushBuffer(connectionId, new Set());
+
+      // After 10 passes, the drain limit is hit and sync.gap (overflow) is triggered
+      const output = mockRes.getOutput();
+      expect(output).toContain('event: sync.gap');
+      expect(output).toContain('"reason":"overflow"');
+
+      // The connection must have transitioned out of buffering mode
+      const conn = (connectionManager as any).connections.get(connectionId);
+      expect(conn.buffering).toBe(false);
+      expect(conn.buffer).toBeUndefined();
+    } finally {
+      membershipRepo.findActiveMembership = origFindActiveMembership;
+    }
   });
 });

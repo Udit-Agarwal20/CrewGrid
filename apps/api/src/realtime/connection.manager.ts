@@ -15,6 +15,7 @@ export interface SseClientConnection {
   connectedAt: Date;
   buffering?: boolean;
   buffer?: OutboxEventDocument[];
+  flushing?: boolean;
 }
 
 export const MAX_HANDSHAKE_BUFFER_SIZE = 100;
@@ -73,64 +74,98 @@ export class ConnectionManager {
     return conn ? conn.teamId : null;
   }
 
-  async flushBuffer(connectionId: string, replayedEventIds?: Set<string> | ObjectId | null): Promise<void> {
+  async flushBuffer(connectionId: string, replayedEventIds?: Set<string>): Promise<void> {
     const conn = this.connections.get(connectionId);
-    if (!conn || !conn.buffering) return;
+    if (!conn || !conn.buffering || conn.flushing) return;
+    conn.flushing = true;
 
-    const bufferedEvents = conn.buffer || [];
-    conn.buffering = false;
-    conn.buffer = undefined;
-
+    const MAX_FLUSH_PASSES = 10;
+    let pass = 0;
+    let totalFlushed = 0;
     const deadConnections: string[] = [];
 
-    // Check if event was already delivered during replay
-    let isReplayed: (id: ObjectId) => boolean;
-    if (replayedEventIds instanceof Set) {
-      isReplayed = (id: ObjectId) => replayedEventIds.has(id.toHexString());
-    } else if (replayedEventIds instanceof ObjectId) {
-      isReplayed = (id: ObjectId) => id.toHexString() <= replayedEventIds.toHexString();
-    } else {
-      isReplayed = () => false;
-    }
+    try {
+      while (pass < MAX_FLUSH_PASSES) {
+        pass++;
+        const batch = conn.buffer || [];
+        conn.buffer = [];
 
-    for (const event of bufferedEvents) {
-      if (isReplayed(event._id)) {
-        continue;
-      }
+        for (const event of batch) {
+          if (replayedEventIds && replayedEventIds.has(event._id.toHexString())) {
+            continue;
+          }
 
-      // Re-verify authorization at socket delivery boundary (Investigation 2 fix)
-      let isAuthorized = false;
-      if (event.scope === 'public-hackathon') {
-        isAuthorized = true;
-      } else if (event.scope === 'team') {
-        if (event.teamId && conn.teamId && conn.teamId.equals(event.teamId)) {
-          try {
-            const active = await membershipRepo.findActiveMembership(conn.hackathonId, conn.userId);
-            if (active && active.teamId.equals(event.teamId)) {
-              isAuthorized = true;
-            } else {
-              // Stale cache defense: clear revoked team authorization
-              conn.teamId = null;
+          totalFlushed++;
+
+          // Re-verify authorization at socket delivery boundary (Investigation 2 fix)
+          let isAuthorized = false;
+          if (event.scope === 'public-hackathon') {
+            isAuthorized = true;
+          } else if (event.scope === 'team') {
+            if (event.teamId && conn.teamId && conn.teamId.equals(event.teamId)) {
+              try {
+                const active = await membershipRepo.findActiveMembership(conn.hackathonId, conn.userId);
+                if (active && active.teamId.equals(event.teamId)) {
+                  isAuthorized = true;
+                } else {
+                  // Stale cache defense: clear revoked team authorization
+                  conn.teamId = null;
+                }
+              } catch {
+                // Fail safe on transient DB failure
+                isAuthorized = false;
+              }
             }
-          } catch {
-            // Fail safe on transient DB failure
-            isAuthorized = false;
+          } else if (event.scope === 'user') {
+            if (event.userId && conn.userId.equals(event.userId)) {
+              isAuthorized = true;
+            }
+          }
+
+          if (isAuthorized) {
+            const message = this.formatSseMessage(event);
+            this.writeToConnection(conn, message, deadConnections);
           }
         }
-      } else if (event.scope === 'user') {
-        if (event.userId && conn.userId.equals(event.userId)) {
-          isAuthorized = true;
+
+        if (!this.connections.has(connectionId)) {
+          break;
+        }
+
+        if (!conn.buffer || conn.buffer.length === 0) {
+          conn.buffering = false;
+          conn.buffer = undefined;
+          break;
+        }
+
+        if (pass >= MAX_FLUSH_PASSES || totalFlushed >= MAX_HANDSHAKE_BUFFER_SIZE) {
+          logger.warn(
+            { connectionId: conn.connectionId, pass, totalFlushed, bufferLength: conn.buffer?.length },
+            'Flush buffer drain limit reached under sustained throughput: triggering sync.gap fallback'
+          );
+          conn.buffering = false;
+          conn.buffer = undefined;
+          try {
+            conn.res.write(this.formatSyncGapMessage(conn.hackathonId, 'overflow'));
+            if (typeof (conn.res as any).flush === 'function') {
+              (conn.res as any).flush();
+            }
+          } catch {
+            deadConnections.push(conn.connectionId);
+          }
+          break;
         }
       }
 
-      if (isAuthorized) {
-        const message = this.formatSseMessage(event);
-        this.writeToConnection(conn, message, deadConnections);
+      for (const deadId of deadConnections) {
+        this.removeConnection(deadId);
       }
-    }
-
-    for (const deadId of deadConnections) {
-      this.removeConnection(deadId);
+    } catch (err) {
+      conn.buffering = false;
+      conn.buffer = undefined;
+      throw err;
+    } finally {
+      conn.flushing = false;
     }
   }
 

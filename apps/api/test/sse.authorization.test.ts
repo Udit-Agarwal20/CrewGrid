@@ -23,9 +23,9 @@ describe('C01: SSE Authorization Security & Freshness Tests', () => {
     connectionManager.closeAll();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     connectionManager.closeAll();
-    outboxDispatcher.stop();
+    await outboxDispatcher.stop();
   });
 
   function createMockSseResponse() {
