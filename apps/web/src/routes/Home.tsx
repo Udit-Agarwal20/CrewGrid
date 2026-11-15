@@ -126,7 +126,10 @@ export function Home() {
             {/* Top Bar Preview */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-[#2C2826] gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-white/10 text-zinc-300 border border-white/15">
+                    Example Preview
+                  </span>
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/25">
                     Forming (2/3 Seats)
                   </span>
@@ -143,7 +146,7 @@ export function Home() {
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#18181C] border border-[#2C2826] text-xs font-mono text-zinc-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live SSE Connected
+                  Simulated Real-Time Stream (Example)
                 </span>
               </div>
             </div>
@@ -200,11 +203,11 @@ export function Home() {
                       </span>
                     </div>
                     <p className="text-xs text-zinc-400">
-                      Top Recommendation: <span className="text-white font-medium">94% Compatibility Match</span> based on timezone synergy and novel skill contribution.
+                      Illustrative Suggestion: <span className="text-white font-medium">94% Compatibility Match (Sample)</span> based on timezone synergy and novel skill contribution.
                     </p>
                   </div>
                   <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-2 border-t border-[#2C2826]/60">
-                    <span>Atomic Lock-in</span>
+                    <span>Sample Algorithm Score</span>
                     <span className="text-emerald-400">Zero Race Condition</span>
                   </div>
                 </div>

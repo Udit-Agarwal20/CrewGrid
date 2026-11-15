@@ -361,21 +361,21 @@ export function EngineeringEvidence() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
             <div className="p-5 rounded-2xl bg-[#111114] border border-[#2C2826] space-y-1">
-              <div className="text-xs font-mono text-emerald-400 font-bold">104 API Tests</div>
+              <div className="text-xs font-mono text-emerald-400 font-bold">166 API Tests</div>
               <div className="text-sm font-bold text-white font-display">API Integration Suite</div>
-              <div className="text-xs text-zinc-400">13 files covering auth, teams, invites, requests, races, and SSE.</div>
+              <div className="text-xs text-zinc-400">16 test files covering auth, teams, invites, requests, races, outbox delivery, and SSE.</div>
             </div>
 
             <div className="p-5 rounded-2xl bg-[#111114] border border-[#2C2826] space-y-1">
-              <div className="text-xs font-mono text-emerald-400 font-bold">14 Web Tests</div>
+              <div className="text-xs font-mono text-emerald-400 font-bold">28 Web Tests</div>
               <div className="text-sm font-bold text-white font-display">Frontend Unit Suite</div>
-              <div className="text-xs text-zinc-400">Vitest tests covering auth context, routing sync, and named SSE events.</div>
+              <div className="text-xs text-zinc-400">5 test files covering auth context, routing sync, named SSE events, matching UI, and modal a11y.</div>
             </div>
 
             <div className="p-5 rounded-2xl bg-[#111114] border border-[#2C2826] space-y-1">
-              <div className="text-xs font-mono text-emerald-400 font-bold">16 E2E Tests</div>
+              <div className="text-xs font-mono text-emerald-400 font-bold">30 E2E Tests</div>
               <div className="text-sm font-bold text-white font-display">Playwright Browser Suite</div>
-              <div className="text-xs text-zinc-400">10 full user flows + 6 routing &amp; SSE regression scenarios.</div>
+              <div className="text-xs text-zinc-400">10 full user flows, 9 automated WCAG 2.2 AA Axe scans, responsive layouts, and SSE scenarios.</div>
             </div>
           </div>
 

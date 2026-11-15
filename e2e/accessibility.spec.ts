@@ -239,4 +239,55 @@ test.describe.serial('Phase 3A: Accessibility, Modal Focus, C08 & Responsive Har
     // Reset viewport for subsequent tests
     await authenticatedPage.setViewportSize({ width: 1280, height: 720 });
   });
+
+  // 5. BRANDING, FONTS & VISUAL POLISH VERIFICATION
+  test('Branding: Space Grotesk, Manrope, custom favicon, and sample preview badges are verified', async ({ page }) => {
+    await page.goto('/');
+
+    // 1. Verify custom favicon
+    const faviconHref = await page.locator('link[rel="icon"]').getAttribute('href');
+    expect(faviconHref).toBe('/favicon.svg');
+
+    // 2. Wait for fonts to be ready
+    await page.evaluate(() => document.fonts.ready);
+
+    // 3. Verify computed font families and active font faces
+    const typography = await page.evaluate(() => {
+      const heading = document.querySelector('h1');
+      const body = document.body;
+      return {
+        headingFont: heading ? window.getComputedStyle(heading).fontFamily : '',
+        bodyFont: body ? window.getComputedStyle(body).fontFamily : '',
+        spaceGroteskLoaded: document.fonts.check('700 16px "Space Grotesk"'),
+        manropeLoaded: document.fonts.check('400 16px "Manrope"')
+      };
+    });
+
+    expect(typography.headingFont).toContain('Space Grotesk');
+    expect(typography.bodyFont).toContain('Manrope');
+    expect(typography.spaceGroteskLoaded).toBe(true);
+    expect(typography.manropeLoaded).toBe(true);
+
+    // 4. Verify sample preview card badge and simulation indicator
+    await expect(page.getByText('Example Preview', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Simulated Real-Time Stream \(Example\)/i)).toBeVisible();
+    await expect(page.getByText(/Illustrative Suggestion/i)).toBeVisible();
+
+    // 5. Capture visual QA screenshots at 1440px, 390px, and 320px
+    const viewports = [
+      { name: 'desktop-1440', width: 1440, height: 900 },
+      { name: 'mobile-390', width: 390, height: 844 },
+      { name: 'mobile-320', width: 320, height: 640 }
+    ];
+
+    for (const vp of viewports) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.screenshot({ path: `audit/screenshots/home-${vp.name}.png`, fullPage: false });
+    }
+
+    // Capture engineering evidence screenshot
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/engineering');
+    await page.screenshot({ path: 'audit/screenshots/engineering-desktop-1440.png', fullPage: false });
+  });
 });

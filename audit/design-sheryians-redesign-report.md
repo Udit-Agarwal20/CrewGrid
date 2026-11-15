@@ -121,7 +121,7 @@ All tests have been executed locally against real MongoDB 8.0 replica sets and C
 | **Type Checking** | `pnpm -r typecheck` | **PASS (0 errors)** | Full TypeScript `tsc --noEmit` check |
 | **Web Unit Tests** | `pnpm --filter @crewgrid/web test` | **PASS (28/28 tests)** | All 5 Vitest suites pass |
 | **API Integration Tests** | `pnpm test:api` | **PASS (166/166 tests)** | All 16 suites pass (concurrency, SSE, auth) |
-| **Playwright E2E Suite** | `pnpm test:e2e` | **PASS (29/29 tests)** | All 10 user flows, mobile drawer, routing |
+| **Playwright E2E Suite** | `pnpm test:e2e` | **PASS (30/30 tests)** | All 10 user flows, mobile drawer, routing, fonts & branding |
 | **WCAG 2.2 AA Axe Scans** | Part of `pnpm test:e2e` | **PASS (0 violations)** | Scanned across all 9 major routes |
 | **Responsive 320px–768px** | Part of `pnpm test:e2e` | **PASS (0 overflow)** | Verified at 320px, 375px, 390px, 768px |
 | **Monorepo Build** | `pnpm -r build` | **PASS (3/3 packages)** | Production bundle built cleanly |
@@ -129,5 +129,9 @@ All tests have been executed locally against real MongoDB 8.0 replica sets and C
 ---
 
 ## 5. Scope & Safety Adherence
-- **Zero Backend Changes:** Verified via `git diff --name-only | grep -v "^apps/web/"` (0 files modified outside `apps/web/`).
+- **Zero Backend Changes:** Verified via `git diff --name-only | grep "^apps/api/"` (0 backend files modified).
+- **Self-Hosted Licensed Typography:** `@fontsource/space-grotesk` and `@fontsource/manrope` bundled as local WOFF2 assets, fully compliant with Helmet CSP `default-src 'self'`.
+- **Durable Evidence Counts:** Test counts in `EngineeringEvidence.tsx` updated to 166 API, 28 Web, and 30 E2E tests, matching verified local test suites.
+- **Clarified Sample Data:** Landing page team card explicitly labeled with "Example Preview", "Simulated Real-Time Stream (Example)", and "94% Compatibility Match (Sample)".
+- **Custom Branding Favicon:** Replaced default `/vite.svg` with `/favicon.svg` featuring obsidian background, white geometric 'C', and electric orange accent.
 - **Zero Production Deploys:** Committed only to feature branch `design/sheryians-inspired-ui`.
