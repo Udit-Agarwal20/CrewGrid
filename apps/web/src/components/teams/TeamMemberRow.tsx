@@ -21,13 +21,13 @@ export function TeamMemberRow({
   const isMe = currentUserId === member.userId;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#171E31] border border-[#35405A]">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] transition-colors">
       <div className="flex items-start sm:items-center gap-3.5 min-w-0">
         <div
           className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
             isLeader
-              ? 'bg-[#FBBF24]/15 border-[#FBBF24]/30 text-[#FBBF24]'
-              : 'bg-[#222A42] border-[#35405A] text-[#B5C1D4]'
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              : 'bg-[#18181C] border-[#2C2826] text-zinc-400'
           }`}
         >
           {isLeader ? <Crown className="w-5 h-5" /> : <User className="w-5 h-5" />}
@@ -35,20 +35,20 @@ export function TeamMemberRow({
 
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-[#E9EDF5] truncate">{member.displayName}</span>
+            <span className="font-bold text-sm text-white truncate">{member.displayName}</span>
             {isMe && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#9BF5CC]/20 text-[#9BF5CC] font-bold">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#FF6B35]/20 text-[#FF7A45] border border-[#FF6B35]/30 font-bold">
                 You
               </span>
             )}
             {isLeader && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/30">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
                 Leader
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#B5C1D4]">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-zinc-400 font-mono">
             {member.handle && <span>@{member.handle}</span>}
             {member.timezone && <span>TZ: {member.timezone}</span>}
             <span>Joined: {new Date(member.joinedAt).toLocaleDateString()}</span>
@@ -70,16 +70,16 @@ export function TeamMemberRow({
           <button
             type="button"
             onClick={() => onTransferLeader?.(member)}
-            className="px-2.5 py-1.5 rounded-lg bg-[#222A42] hover:bg-[#35405A] text-xs font-semibold text-[#E9EDF5] border border-[#35405A] flex items-center gap-1.5 transition"
+            className="px-3 py-1.5 rounded-xl bg-[#18181C] hover:bg-[#202026] text-xs font-semibold text-zinc-200 hover:text-white border border-[#2C2826] flex items-center gap-1.5 transition-colors"
             title="Transfer team leadership to this member"
           >
-            <ArrowRightLeft className="w-3.5 h-3.5 text-[#9BF5CC]" />
+            <ArrowRightLeft className="w-3.5 h-3.5 text-[#FF7A45]" />
             Make Leader
           </button>
           <button
             type="button"
             onClick={() => onRemove?.(member)}
-            className="p-1.5 rounded-lg bg-[#222A42] hover:bg-[#F87171]/20 text-[#B5C1D4] hover:text-[#F87171] border border-[#35405A] hover:border-[#F87171]/40 transition"
+            className="p-2 rounded-xl bg-[#18181C] hover:bg-[#241417] text-zinc-400 hover:text-[#F43F5E] border border-[#2C2826] hover:border-[#52242D] transition-colors"
             title="Remove member from team"
             aria-label={`Remove ${member.displayName}`}
           >
@@ -90,4 +90,3 @@ export function TeamMemberRow({
     </div>
   );
 }
-

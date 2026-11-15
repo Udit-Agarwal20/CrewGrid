@@ -102,20 +102,20 @@ export function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B1020] text-[#E9EDF5] flex items-center justify-center p-4">
-      <div className="w-full max-w-xl p-6 sm:p-8 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl my-8">
+    <div className="min-h-screen bg-[#08080A] text-[#F4F4F5] flex items-center justify-center p-4 selection:bg-[#FF6B35] selection:text-[#08080A]">
+      <div className="w-full max-w-xl p-6 sm:p-8 rounded-2xl bg-[#111114] border border-[#2C2826] shadow-2xl my-8">
         <div className="text-center mb-6">
-          <span className="w-10 h-10 rounded-xl bg-[#9BF5CC]/15 text-[#9BF5CC] flex items-center justify-center mx-auto mb-3">
-            <User className="w-5 h-5" />
+          <span className="w-12 h-12 rounded-2xl bg-[#18181C] text-[#FF7A45] border border-[#2C2826] flex items-center justify-center mx-auto mb-3 shadow-xs">
+            <User className="w-6 h-6" />
           </span>
-          <h1 className="text-2xl font-bold text-[#E9EDF5]">Complete Your Profile</h1>
-          <p className="text-xs text-[#B5C1D4] mt-1 max-w-sm mx-auto">
+          <h1 className="font-display text-2xl font-bold text-white tracking-tight">Complete Your Profile</h1>
+          <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
             Help hackathon team leaders and matching algorithms discover your complementary skills.
           </p>
         </div>
 
         {errorMessage && (
-          <div role="alert" className="p-3.5 mb-5 rounded-xl bg-[#F87171]/15 border border-[#F87171]/30 text-xs text-[#F87171]">
+          <div role="alert" className="p-3.5 mb-5 rounded-xl bg-[#181113] border border-[#4A2027] text-xs text-[#F43F5E]">
             {errorMessage}
           </div>
         )}
@@ -123,7 +123,7 @@ export function Onboarding() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="onb-name" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              <label htmlFor="onb-name" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
                 Display Name
               </label>
               <input
@@ -133,12 +133,12 @@ export function Onboarding() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={60}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white focus:ring-2 focus:ring-white focus:outline-none transition-colors"
               />
             </div>
 
             <div>
-              <label htmlFor="onb-handle" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              <label htmlFor="onb-handle" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
                 Public Handle (@handle)
               </label>
               <input
@@ -148,13 +148,13 @@ export function Onboarding() {
                 onChange={(e) => setHandle(e.target.value)}
                 placeholder="adacodes"
                 maxLength={24}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] font-mono focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white font-mono focus:ring-2 focus:ring-white focus:outline-none transition-colors"
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="onb-bio" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+            <label htmlFor="onb-bio" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
               Bio / Experience (Max 280 chars)
             </label>
             <textarea
@@ -164,13 +164,13 @@ export function Onboarding() {
               onChange={(e) => setBio(e.target.value)}
               placeholder="Full-stack engineer specializing in distributed systems and React..."
               maxLength={280}
-              className="w-full px-3.5 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-sm text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none resize-none"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors resize-none leading-relaxed"
             />
           </div>
 
           {/* Skills */}
           <div>
-            <label className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+            <label className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
               Technical Skills (Up to 15 chips)
             </label>
             <div className="flex gap-2">
@@ -186,12 +186,12 @@ export function Onboarding() {
                 }}
                 placeholder="e.g. TypeScript, React, Go, Docker"
                 maxLength={40}
-                className="flex-1 px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] placeholder-[#B5C1D4]/40 focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+                className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white placeholder-zinc-500 focus:ring-2 focus:ring-white focus:outline-none transition-colors"
               />
               <button
                 type="button"
                 onClick={handleAddSkill}
-                className="px-3.5 py-2 rounded-lg bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] flex items-center gap-1 transition"
+                className="px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold flex items-center gap-1 transition-all duration-200 active:scale-95 shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add
@@ -210,24 +210,24 @@ export function Onboarding() {
           {/* Timezone and Hours */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label htmlFor="onb-tz" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              <label htmlFor="onb-tz" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
                 Timezone
               </label>
               <select
                 id="onb-tz"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] font-mono focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+                className="w-full px-3 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white font-mono focus:ring-2 focus:ring-white focus:outline-none transition-colors"
               >
                 {POPULAR_TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
+                  <option key={tz} value={tz} className="bg-[#111114] text-white">
                     {tz}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label htmlFor="onb-start" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              <label htmlFor="onb-start" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
                 Working Start (HH:MM)
               </label>
               <input
@@ -235,11 +235,11 @@ export function Onboarding() {
                 type="time"
                 value={startLocal}
                 onChange={(e) => setStartLocal(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] font-mono focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white font-mono focus:ring-2 focus:ring-white focus:outline-none transition-colors"
               />
             </div>
             <div>
-              <label htmlFor="onb-end" className="block text-xs font-semibold text-[#E9EDF5] mb-1.5">
+              <label htmlFor="onb-end" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1.5">
                 Working End (HH:MM)
               </label>
               <input
@@ -247,25 +247,25 @@ export function Onboarding() {
                 type="time"
                 value={endLocal}
                 onChange={(e) => setEndLocal(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[#222A42] border border-[#35405A] text-xs text-[#E9EDF5] font-mono focus:ring-2 focus:ring-[#9BF5CC] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-xs text-white font-mono focus:ring-2 focus:ring-white focus:outline-none transition-colors"
               />
             </div>
           </div>
 
           {/* Discoverability Opt-In (Default OFF) */}
-          <div className="p-4 rounded-xl bg-[#222A42]/50 border border-[#35405A] flex items-start gap-3 mt-4">
+          <div className="p-4 rounded-xl bg-[#18181C] border border-[#2C2826] flex items-start gap-3 mt-4">
             <input
               id="discoverable-toggle"
               type="checkbox"
               checked={discoverable}
               onChange={(e) => setDiscoverable(e.target.checked)}
-              className="mt-1 w-4 h-4 rounded text-[#9BF5CC] bg-[#171E31] border-[#35405A] focus:ring-[#9BF5CC]"
+              className="mt-1 w-4 h-4 rounded text-white bg-[#08080A] border-[#2C2826] focus:ring-white accent-white"
             />
             <div>
-              <label htmlFor="discoverable-toggle" className="text-xs font-bold text-[#E9EDF5] cursor-pointer">
+              <label htmlFor="discoverable-toggle" className="text-xs font-bold text-white cursor-pointer">
                 Show my profile on the Candidate Teammate Board
               </label>
-              <p className="text-[11px] text-[#B5C1D4] mt-0.5 leading-relaxed">
+              <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
                 Default is OFF. When enabled, team leaders can view your complementary skills and send invites while you are unassigned. Email is never shown.
               </p>
             </div>
@@ -274,7 +274,7 @@ export function Onboarding() {
           <button
             type="submit"
             disabled={updateProfile.isPending}
-            className="w-full mt-4 py-3 px-4 rounded-xl bg-[#9BF5CC] text-[#0B1020] font-bold text-sm hover:bg-[#86e0b7] flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-[#9BF5CC]/15"
+            className="w-full mt-5 py-3.5 px-4 rounded-full bg-white hover:bg-zinc-200 text-black font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 disabled:opacity-50 shadow-md shadow-white/10"
           >
             {updateProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
             Save Profile & Continue to Dashboard

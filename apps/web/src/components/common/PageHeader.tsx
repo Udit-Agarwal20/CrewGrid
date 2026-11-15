@@ -14,13 +14,13 @@ export function PageHeader({ title, description, subtitle, action, actions, chil
   const acts = actions || action;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[#35405A]">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-8 border-b border-[#2C2826]">
       <div className="min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#E9EDF5] tracking-tight">{title}</h1>
-        {desc && <p className="text-sm text-[#B5C1D4] mt-1">{desc}</p>}
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-tight">{title}</h1>
+        {desc && <p className="text-sm text-zinc-400 mt-1.5 leading-relaxed">{desc}</p>}
         {children}
       </div>
-      {acts && <div className="flex items-center gap-2.5 shrink-0">{acts}</div>}
+      {acts && <div className="flex items-center gap-3 shrink-0">{acts}</div>}
     </div>
   );
 }

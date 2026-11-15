@@ -23,13 +23,13 @@ export function TeamCard({
   const isFull = team.openSeats === 0;
 
   return (
-    <div className="flex flex-col justify-between p-5 rounded-2xl bg-[#171E31] border border-[#35405A] hover:border-[#9BF5CC]/40 transition shadow-lg group">
+    <div className="flex flex-col justify-between p-6 rounded-2xl bg-[#111114] border border-[#2C2826] hover:border-[#4E4A48] hover:-translate-y-1 transition-all duration-300 shadow-lg group">
       <div>
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <Link
             to={`/app/teams/${team.id}`}
-            className="text-lg font-bold text-[#E9EDF5] hover:text-[#9BF5CC] transition group-hover:underline"
+            className="font-display text-lg font-bold text-white hover:text-[#FF7A45] transition-colors"
           >
             {team.name}
           </Link>
@@ -37,7 +37,7 @@ export function TeamCard({
         </div>
 
         {/* Description */}
-        <p className="text-xs text-[#B5C1D4] line-clamp-2 mb-4 leading-relaxed">
+        <p className="text-xs text-zinc-400 line-clamp-2 mb-4 leading-relaxed">
           {team.description || 'No description provided.'}
         </p>
 
@@ -56,7 +56,7 @@ export function TeamCard({
               <SkillPill key={skill} skill={skill} size="sm" />
             ))}
             {team.requiredSkills.length > 4 && (
-              <span className="text-[11px] font-mono text-[#B5C1D4] self-center">
+              <span className="text-[11px] font-mono text-zinc-500 self-center">
                 +{team.requiredSkills.length - 4} more
               </span>
             )}
@@ -65,11 +65,11 @@ export function TeamCard({
       </div>
 
       {/* Primary Action Button */}
-      <div className="pt-4 border-t border-[#35405A]/60">
+      <div className="pt-4 border-t border-[#2C2826]">
         {isMyTeam ? (
           <Link
             to={`/app/teams/${team.id}`}
-            className="w-full py-2 px-3 rounded-lg bg-[#9BF5CC]/15 text-[#9BF5CC] hover:bg-[#9BF5CC]/25 border border-[#9BF5CC]/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+            className="w-full py-2.5 px-3 rounded-xl bg-[#FF6B35]/15 text-[#FF7A45] hover:bg-[#FF6B35]/25 border border-[#FF6B35]/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
           >
             <UserCheck className="w-3.5 h-3.5" />
             Open My Team
@@ -78,16 +78,16 @@ export function TeamCard({
           <button
             type="button"
             disabled
-            className="w-full py-2 px-3 rounded-lg bg-[#222A42] text-[#B5C1D4] border border-[#35405A] text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-80"
+            className="w-full py-2.5 px-3 rounded-xl bg-[#18181C] text-zinc-400 border border-[#2C2826] text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-80"
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-[#9BF5CC]" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             Request Pending
           </button>
         ) : isFull ? (
           <button
             type="button"
             disabled
-            className="w-full py-2 px-3 rounded-lg bg-[#222A42] text-[#B5C1D4] border border-[#35405A] text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60"
+            className="w-full py-2.5 px-3 rounded-xl bg-[#18181C] text-zinc-500 border border-[#2C2826] text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60"
           >
             <Lock className="w-3.5 h-3.5" />
             Team Full
@@ -97,15 +97,15 @@ export function TeamCard({
             type="button"
             disabled
             title="You are already in a team for this hackathon"
-            className="w-full py-2 px-3 rounded-lg bg-[#222A42] text-[#B5C1D4] border border-[#35405A] text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60"
+            className="w-full py-2.5 px-3 rounded-xl bg-[#18181C] text-zinc-500 border border-[#2C2826] text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60"
           >
-            Already in a team
+            Already in a Team
           </button>
         ) : (
           <button
             type="button"
             onClick={() => onRequestJoin?.(team)}
-            className="w-full py-2 px-3 rounded-lg bg-[#9BF5CC] text-[#0B1020] hover:bg-[#86e0b7] text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
+            className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 shadow-sm"
           >
             Request to Join
             <ArrowRight className="w-3.5 h-3.5" />

@@ -10,21 +10,21 @@ interface LiveConnectionStatusProps {
 export function LiveConnectionStatus({ status, lastActivity, className = '' }: LiveConnectionStatusProps) {
   const configs = {
     connected: {
-      color: 'bg-[#9BF5CC]',
-      ring: 'bg-[#9BF5CC]/30',
-      text: 'text-[#9BF5CC]',
+      color: 'bg-emerald-400',
+      ring: 'bg-emerald-400/40',
+      text: 'text-emerald-400',
       label: 'Live'
     },
     connecting: {
-      color: 'bg-[#FBBF24]',
-      ring: 'bg-[#FBBF24]/30',
-      text: 'text-[#FBBF24]',
+      color: 'bg-amber-400',
+      ring: 'bg-amber-400/40',
+      text: 'text-amber-400',
       label: 'Connecting...'
     },
     disconnected: {
-      color: 'bg-[#F87171]',
-      ring: 'bg-[#F87171]/30',
-      text: 'text-[#B5C1D4]',
+      color: 'bg-rose-400',
+      ring: 'bg-rose-400/40',
+      text: 'text-zinc-400',
       label: 'Offline'
     }
   };
@@ -36,7 +36,7 @@ export function LiveConnectionStatus({ status, lastActivity, className = '' }: L
       role="status"
       aria-live="polite"
       aria-label={`Real-time connection status: ${current.label}`}
-      className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#171E31] border border-[#35405A] text-xs font-mono ${className}`}
+      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#141418] border border-[#2C2826] text-xs font-mono shadow-xs ${className}`}
       title={lastActivity ? `Last event: ${lastActivity.toLocaleTimeString()}` : 'SSE real-time stream status'}
     >
       <span className="relative flex h-2 w-2">
@@ -46,8 +46,7 @@ export function LiveConnectionStatus({ status, lastActivity, className = '' }: L
         <span className={`relative inline-flex rounded-full h-2 w-2 ${current.color}`} />
       </span>
       <span className={`font-semibold ${current.text}`}>{current.label}</span>
-      <Radio className="w-3 h-3 text-[#B5C1D4]" />
+      <Radio className="w-3 h-3 text-zinc-500" />
     </div>
   );
 }
-

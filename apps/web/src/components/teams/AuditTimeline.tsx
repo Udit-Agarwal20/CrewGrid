@@ -26,18 +26,18 @@ export function AuditTimeline({
 
   if (isLoading && events.length === 0) {
     return (
-      <div className="p-8 text-center rounded-xl bg-[#171E31] border border-[#35405A]">
-        <Loader2 className="w-6 h-6 text-[#9BF5CC] animate-spin mx-auto mb-2" />
-        <p className="text-xs text-[#B5C1D4]">Loading audit history...</p>
+      <div className="p-8 text-center rounded-2xl bg-[#111114] border border-[#2C2826]">
+        <Loader2 className="w-6 h-6 text-[#FF7A45] animate-spin mx-auto mb-2" />
+        <p className="text-xs text-zinc-400">Loading audit history...</p>
       </div>
     );
   }
   if (events.length === 0) {
     return (
-      <div className="p-8 text-center rounded-xl bg-[#171E31] border border-[#35405A]">
-        <History className="w-8 h-8 text-[#B5C1D4] mx-auto mb-2" />
-        <h4 className="text-sm font-semibold text-[#E9EDF5]">No activity recorded yet</h4>
-        <p className="text-xs text-[#B5C1D4] mt-1">Audit log will track all team admissions, leaves, and leadership changes.</p>
+      <div className="p-8 text-center rounded-2xl bg-[#111114] border border-[#2C2826]">
+        <History className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
+        <h4 className="font-display text-sm font-semibold text-white">No activity recorded yet</h4>
+        <p className="text-xs text-zinc-400 mt-1">Audit log will track all team admissions, leaves, and leadership changes.</p>
       </div>
     );
   }
@@ -79,23 +79,23 @@ export function AuditTimeline({
 
   return (
     <div className="space-y-4">
-      <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#35405A]">
+      <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2C2826]">
         {events.map((event) => (
           <div key={event.id} className="relative">
-            <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-[#9BF5CC] border-2 border-[#171E31]" />
-            <div className="p-3.5 rounded-xl bg-[#171E31] border border-[#35405A] text-xs">
+            <div className="absolute -left-[27px] top-1.5 w-3 h-3 rounded-full bg-[#FF6B35] border-2 border-[#111114]" />
+            <div className="p-4 rounded-xl bg-[#111114] border border-[#2C2826] text-xs">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="font-bold text-[#E9EDF5]">{formatAction(event.action)}</span>
-                <span className="font-mono text-[11px] text-[#B5C1D4] flex items-center gap-1 shrink-0">
+                <span className="font-bold text-white">{formatAction(event.action)}</span>
+                <span className="font-mono text-[11px] text-zinc-400 flex items-center gap-1 shrink-0">
                   <Clock className="w-3 h-3" />
                   {new Date(event.occurredAt).toLocaleString()}
                 </span>
               </div>
-              <p className="font-mono text-[11px] text-[#B5C1D4]/80">
+              <p className="font-mono text-[11px] text-zinc-500">
                 Actor: {event.actorId} {event.subjectId ? `· Subject: ${event.subjectId}` : ''}
               </p>
               {event.changes && Object.keys(event.changes).length > 0 && (
-                <div className="mt-2 p-2 rounded bg-[#0B1020]/60 border border-[#35405A]/50 font-mono text-[10px] text-[#B5C1D4] overflow-x-auto">
+                <div className="mt-2.5 p-2.5 rounded-lg bg-[#08080A] border border-[#2C2826] font-mono text-[10px] text-zinc-400 overflow-x-auto">
                   <pre>{JSON.stringify(event.changes, null, 2)}</pre>
                 </div>
               )}
@@ -109,7 +109,7 @@ export function AuditTimeline({
           type="button"
           onClick={onLoadMore}
           disabled={isLoading}
-          className="w-full py-2.5 rounded-lg bg-[#222A42] hover:bg-[#35405A] border border-[#35405A] text-xs font-semibold text-[#E9EDF5] transition"
+          className="w-full py-2.5 rounded-xl bg-[#18181C] hover:bg-[#202026] border border-[#2C2826] text-xs font-semibold text-white transition-colors"
         >
           {isLoading ? 'Loading older events...' : 'Load older activity'}
         </button>

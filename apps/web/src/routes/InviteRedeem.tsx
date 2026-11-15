@@ -96,26 +96,26 @@ export function InviteRedeem() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#0B1020] flex items-center justify-center p-4">
-        <Loader2 className="w-8 h-8 text-[#9BF5CC] animate-spin" />
+      <div className="min-h-screen bg-[#08080A] flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
       </div>
     );
   }
 
   if (noTokenFound) {
     return (
-      <div className="min-h-screen bg-[#0B1020] text-[#E9EDF5] flex items-center justify-center p-4">
-        <div className="w-full max-w-md p-8 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl text-center space-y-4">
-          <AlertCircle className="w-12 h-12 text-[#FBBF24] mx-auto" />
-          <h1 className="text-xl font-bold">Invalid or Missing Invite Link</h1>
-          <p className="text-xs text-[#B5C1D4] leading-relaxed">
+      <div className="min-h-screen bg-[#08080A] text-[#F4F4F5] flex items-center justify-center p-4">
+        <div className="w-full max-w-md p-8 rounded-2xl bg-[#111114] border border-[#2C2826] shadow-2xl text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-[#FFB020] mx-auto" />
+          <h1 className="font-display text-xl font-bold text-white">Invalid or Missing Invite Link</h1>
+          <p className="text-xs text-zinc-400 leading-relaxed">
             CrewGrid team invites require a secure fragment token (e.g.{' '}
-            <code className="text-[#9BF5CC]">/invite#token=...</code>). Make sure you clicked the complete invite link provided by your team leader.
+            <code className="text-[#FF7A45] font-mono">/invite#token=...</code>). Make sure you clicked the complete invite link provided by your team leader.
           </p>
           <div className="pt-2">
             <Link
               to="/app"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-black bg-white hover:bg-zinc-200 transition shadow-md"
             >
               Go to Dashboard
             </Link>
@@ -126,24 +126,24 @@ export function InviteRedeem() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B1020] text-[#E9EDF5] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#08080A] text-[#F4F4F5] flex items-center justify-center p-4 selection:bg-[#FF6B35] selection:text-[#08080A]">
       <div className="w-full max-w-md space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#171E31] border border-[#35405A] text-xs font-mono text-[#9BF5CC]">
-            <ShieldCheck className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#111114] border border-[#2C2826] text-xs font-mono text-zinc-300">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             Secure One-Time Invite
           </div>
-          <h1 className="text-2xl font-black tracking-tight">Join Your Hackathon Crew</h1>
-          <p className="text-xs text-[#B5C1D4]">
+          <h1 className="font-display text-2xl font-black tracking-tight text-white">Join Your Hackathon Crew</h1>
+          <p className="text-xs text-zinc-400">
             You have received an invitation to join a team on CrewGrid.
           </p>
         </div>
 
         {/* Card Body */}
-        <div className="p-6 md:p-8 rounded-2xl bg-[#171E31] border border-[#35405A] shadow-2xl space-y-6">
+        <div className="p-6 md:p-8 rounded-2xl bg-[#111114] border border-[#2C2826] shadow-2xl space-y-6">
           {redeemError && (
-            <div className="p-3.5 rounded-xl bg-[#F87171]/10 border border-[#F87171]/30 flex items-start gap-2.5 text-xs text-[#F87171]">
+            <div role="alert" className="p-3.5 rounded-xl bg-[#181113] border border-[#4A2027] flex items-start gap-2.5 text-xs text-[#F43F5E]">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{redeemError}</span>
             </div>
@@ -152,18 +152,18 @@ export function InviteRedeem() {
           {isAuthenticated ? (
             /* Authenticated Flow: Confirm Join */
             <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-[#222A42]/60 border border-[#35405A] space-y-2">
-                <div className="text-xs font-mono text-[#B5C1D4]">Joining as:</div>
-                <div className="text-sm font-bold text-[#E9EDF5] flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#9BF5CC]/20 text-[#9BF5CC] font-mono text-xs flex items-center justify-center font-bold">
+              <div className="p-4 rounded-xl bg-[#18181C] border border-[#2C2826] space-y-2">
+                <div className="text-xs font-mono font-bold text-zinc-400 uppercase">Joining as:</div>
+                <div className="text-sm font-bold text-white flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-white text-black font-display text-xs flex items-center justify-center font-bold">
                     {user?.displayName?.[0] || 'U'}
                   </div>
                   <span>{user?.displayName}</span>
-                  {user?.handle && <span className="text-xs text-[#9BF5CC]">(@{user.handle})</span>}
+                  {user?.handle && <span className="text-xs text-zinc-400 font-mono">(@{user.handle})</span>}
                 </div>
               </div>
 
-              <div className="text-xs text-[#B5C1D4] leading-relaxed">
+              <div className="text-xs text-zinc-400 leading-relaxed">
                 By accepting this invitation, you will immediately become an active member of the team.
                 Any pending join requests you sent to other teams will be automatically canceled.
               </div>
@@ -172,7 +172,7 @@ export function InviteRedeem() {
                 type="button"
                 disabled={redeemMutation.isPending || !token}
                 onClick={handleRedeem}
-                className="w-full py-3 rounded-xl text-sm font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg"
+                className="w-full py-3 rounded-full text-sm font-bold text-black bg-white hover:bg-zinc-200 transition-all duration-200 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 shadow-md shadow-white/10"
               >
                 {redeemMutation.isPending ? (
                   <>
@@ -190,13 +190,13 @@ export function InviteRedeem() {
           ) : (
             /* Unauthenticated Flow: Inline Login/Register without losing token */
             <div className="space-y-4">
-              <div className="p-3 rounded-xl bg-[#222A42]/60 border border-[#35405A] text-xs text-[#B5C1D4] flex items-center gap-2">
-                <Lock className="w-4 h-4 text-[#9BF5CC] shrink-0" />
+              <div className="p-3 rounded-xl bg-[#18181C] border border-[#2C2826] text-xs text-zinc-400 flex items-center gap-2">
+                <Lock className="w-4 h-4 text-[#FF7A45] shrink-0" />
                 <span>Please sign in or create an account to accept this invite. Your invite token is securely held in memory.</span>
               </div>
 
               {/* Toggle Login / Register */}
-              <div className="grid grid-cols-2 p-1 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs font-bold">
+              <div className="grid grid-cols-2 p-1 rounded-xl bg-[#18181C] border border-[#2C2826] text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => {
@@ -205,8 +205,8 @@ export function InviteRedeem() {
                   }}
                   className={`py-2 rounded-lg transition ${
                     authMode === 'login'
-                      ? 'bg-[#171E31] text-[#9BF5CC] shadow-sm'
-                      : 'text-[#B5C1D4] hover:text-[#E9EDF5]'
+                      ? 'bg-white text-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   Sign In
@@ -219,8 +219,8 @@ export function InviteRedeem() {
                   }}
                   className={`py-2 rounded-lg transition ${
                     authMode === 'register'
-                      ? 'bg-[#171E31] text-[#9BF5CC] shadow-sm'
-                      : 'text-[#B5C1D4] hover:text-[#E9EDF5]'
+                      ? 'bg-white text-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   Create Account
@@ -228,7 +228,7 @@ export function InviteRedeem() {
               </div>
 
               {authError && (
-                <div className="p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/30 text-xs text-[#F87171]">
+                <div role="alert" className="p-3 rounded-xl bg-[#181113] border border-[#4A2027] text-xs text-[#F43F5E]">
                   {authError}
                 </div>
               )}
@@ -236,7 +236,7 @@ export function InviteRedeem() {
               <form onSubmit={handleAuthSubmit} className="space-y-3 pt-1">
                 {authMode === 'register' && (
                   <div>
-                    <label htmlFor="redeem-fullname" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
+                    <label htmlFor="redeem-fullname" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1">
                       Full Name
                     </label>
                     <input
@@ -245,14 +245,14 @@ export function InviteRedeem() {
                       required
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white transition-colors"
                       placeholder="Ada Lovelace"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label htmlFor="redeem-email" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
+                  <label htmlFor="redeem-email" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1">
                     Email Address
                   </label>
                   <input
@@ -261,14 +261,14 @@ export function InviteRedeem() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white transition-colors"
                     placeholder="user@example.com"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="redeem-password" className="block text-xs font-mono font-bold text-[#B5C1D4] uppercase mb-1">
-                    Password {authMode === 'register' && <span className="text-[#B5C1D4]">(min 12 chars)</span>}
+                  <label htmlFor="redeem-password" className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1">
+                    Password {authMode === 'register' && <span className="text-zinc-500">(min 12 chars)</span>}
                   </label>
                   <input
                     id="redeem-password"
@@ -277,7 +277,7 @@ export function InviteRedeem() {
                     minLength={authMode === 'register' ? 12 : undefined}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B1020] border border-[#35405A] text-xs text-[#E9EDF5] focus:outline-none focus:ring-2 focus:ring-[#9BF5CC] focus-visible:ring-2 focus-visible:ring-[#9BF5CC]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#18181C] border border-[#2C2826] hover:border-[#4E4A48] text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white transition-colors"
                     placeholder="••••••••••••"
                   />
                 </div>
@@ -285,7 +285,7 @@ export function InviteRedeem() {
                 <button
                   type="submit"
                   disabled={authSubmitting}
-                  className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold text-[#0B1020] bg-[#9BF5CC] hover:bg-[#86E4BA] transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  className="w-full mt-2 py-3 rounded-full text-xs font-bold text-black bg-white hover:bg-zinc-200 transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-md shadow-white/10"
                 >
                   {authSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -307,7 +307,7 @@ export function InviteRedeem() {
         </div>
 
         <div className="text-center">
-          <Link to="/" className="text-xs text-[#B5C1D4] hover:text-[#9BF5CC] transition">
+          <Link to="/" className="text-xs text-zinc-500 hover:text-white transition">
             CrewGrid — Problem Statement 1
           </Link>
         </div>

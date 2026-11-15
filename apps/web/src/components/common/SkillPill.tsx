@@ -7,11 +7,11 @@ interface SkillPillProps {
 }
 
 export function SkillPill({ skill, onRemove, size = 'md' }: SkillPillProps) {
-  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs';
+  const sizeClasses = size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-xs';
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md bg-[#222A42] text-[#E9EDF5] border border-[#35405A] font-medium font-mono ${sizeClasses}`}
+      className={`inline-flex items-center gap-1.5 rounded-full bg-[#18181C] text-zinc-200 border border-[#2C2826] hover:border-[#4E4A48] font-mono font-medium transition-colors ${sizeClasses}`}
     >
       <span>{skill}</span>
       {onRemove && (
@@ -22,7 +22,7 @@ export function SkillPill({ skill, onRemove, size = 'md' }: SkillPillProps) {
             onRemove();
           }}
           aria-label={`Remove skill ${skill}`}
-          className="text-[#B5C1D4] hover:text-[#F87171] focus:ring-1 focus:ring-[#F87171] rounded p-0.5 transition"
+          className="text-zinc-400 hover:text-[#F43F5E] focus-visible:ring-1 focus-visible:ring-[#F43F5E] rounded-full p-0.5 transition"
         >
           <X className="w-3 h-3" />
         </button>
@@ -30,4 +30,3 @@ export function SkillPill({ skill, onRemove, size = 'md' }: SkillPillProps) {
     </span>
   );
 }
-
